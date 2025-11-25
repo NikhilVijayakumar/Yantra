@@ -1,0 +1,16 @@
+# src/nikhil/yantra/domain/observability/interfaces.py
+from typing import Protocol, Any, Dict, Optional
+
+
+class IExperimentTracker(Protocol):
+    """Protocol for logging experiments (MLflow implementation details hidden)."""
+
+    def start_run(self, run_name: str, nested: bool = False) -> Any: ...
+
+    def log_metric(self, key: str, value: float, step: Optional[int] = None) -> None: ...
+
+    def log_param(self, key: str, value: Any) -> None: ...
+
+    def log_llm_trace(self, prompt: str, response: str, model_name: str) -> None: ...
+
+    def end_run(self) -> None: ...

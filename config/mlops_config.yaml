@@ -1,0 +1,15 @@
+# Data paths
+domain_root_path: ./data/input
+output_dir_path: ./data/output
+
+# DVC commit message
+commit_message: "Data update"
+
+# S3/MinIO configuration
+s3_config:
+  bucket_name: "yantra-data"
+  endpoint_url: "http://localhost:9000"
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
+  region: "us-east-1"
+  use_ssl: false

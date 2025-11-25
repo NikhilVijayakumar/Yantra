@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # -----------------------------
+  # 1. SHARED STORAGE (MinIO)
+  # Used by MLflow for artifacts and DVC for data versioning
+  # -----------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-01-31T20-20-33Z
+    container_name: yantra_minio
+    restart: always
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - yantra_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Service to automatically create buckets (mlflow, prefect)
+  minio-init:
+    image: minio/mc
+    container_name: yantra_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set myminio http://minio:9000 minioadmin minioadmin; do echo '...waiting for minio'; sleep 1; done;
+      mc mb myminio/mlflow-bucket;
+      mc mb myminio/prefect-bucket;
+      exit 0;
+      "
+    networks:
+      - yantra_net
+
+  # -----------------------------
+  # 2. SHARED DATABASE (Postgres)
+  # -----------------------------
+  postgres:
+    image: postgres:15
+    container_name: yantra_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      # We need multiple DBs (one for mlflow, one for prefect). 
+      # We'll create them using a script mounted below.
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_dbs.sql:/docker-entrypoint-initdb.d/init_dbs.sql
+    networks:
+      - yantra_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------
+  # 3. MLFLOW TRACKING SERVER
+  # -----------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.0
+    container_name: yantra_mlflow
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      # Point to Postgres
+      MLFLOW_BACKEND_STORE_URI: postgresql://postgres:password@postgres:5432/mlflow_db
+      # Point to MinIO
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      mlflow server 
+      --backend-store-uri postgresql://postgres:password@postgres:5432/mlflow_db
+      --host 0.0.0.0
+      --port 5000
+      --default-artifact-root s3://mlflow-bucket/
+    networks:
+      - yantra_net
+
+  # -----------------------------
+  # 4. PREFECT SERVER
+  # -----------------------------
+  prefect:
+    image: prefecthq/prefect:2-latest
+    container_name: yantra_prefect
+    restart: always
+    ports:
+      - "4200:4200"
+    environment:
+      # Prefect needs to know where its database is
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:password@postgres:5432/prefect_db
+      # Prefect API URL for the UI to talk to the backend
+      PREFECT_API_URL: http://0.0.0.0:4200/api
+      # MinIO/S3 Settings for Prefect Blocks (optional but recommended)
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: prefect server start --host 0.0.0.0
+    networks:
+      - yantra_net
+
+volumes:
+  minio_data:
+  postgres_data:
+
+networks:
+  yantra_net:
+    driver: bridge
