@@ -1,3 +1,4 @@
+# src/nikhil/yantra/domain/data_versioning/dvc_setup.py
 import subprocess
 import boto3
 from botocore.client import Config
@@ -6,72 +7,53 @@ from pathlib import Path
 from nikhil.yantra.utils.yaml_utils import YamlUtils
 
 
+# Define custom exceptions for the library
+class YantraDVCError(Exception):
+    """Base exception for Yantra DVC operations."""
+    pass
+
 
 class DVCSetup:
-    """
-    Automates DVC setup for S3 (AWS/MinIO).
-    Now includes auto-creation of S3 buckets to prevent 400 errors.
-    
-    This class handles the initial setup of DVC for a project, including:
-    - Creating local directories
-    - Ensuring S3 buckets exist (creates if needed)
-    - Configuring DVC remote storage
-    - Bootstrapping initial data tracking
-    """
-
     def __init__(self, config_path: str):
-        print("🚀 Initializing DVC Environment Setup (S3/MinIO)...")
         self.config_path = Path(config_path)
         if not self.config_path.exists():
-            print(f"❌ Configuration file not found at: {self.config_path}")
-            exit(1)
+            # FIX 1: Raise exception instead of exit(1)
+            raise YantraDVCError(f"Configuration file not found at: {self.config_path}")
+
         self.config = YamlUtils.yaml_safe_load(config_path)
         self.root_dir = Path.cwd()
-        self.input_dir = Path(self.config["domain_root_path"])
-        self.output_dir = Path(self.config["output_dir_path"])
+        # Handle optional paths safely
+        self.input_dir = Path(self.config.get("domain_root_path", "data/input"))
+        self.output_dir = Path(self.config.get("output_dir_path", "data/output"))
         self.s3_config = self.config.get("s3_config")
-
-        print(f"   - Project Root: {self.root_dir}")
-        print(f"   - Input Dir: {self.input_dir}")
-        print(f"   - Output Dir: {self.output_dir}")
 
     def _run_command(self, command: list, check=True):
         try:
-            # print(f"   - Executing: {' '.join(command)}")
-            # (Uncomment above for verbose logging)
-            result = subprocess.run(command, check=check, text=True, cwd=self.root_dir, capture_output=True)
-            if result.stderr and check:
-                if "WARNING" not in result.stderr:
-                    print(f"   - Info: {result.stderr.strip()}")
+            # FIX 2: Simplified subprocess handling
+            result = subprocess.run(
+                command,
+                check=check,
+                text=True,
+                cwd=self.root_dir,
+                capture_output=True
+            )
+            # Only print stdout if needed, ignore stderr unless it's an error
+            # (handled by check=True)
             return result
         except subprocess.CalledProcessError as e:
-            print(f"❌ Command failed: {' '.join(command)}")
-            print(f"   Error: {e.stderr.strip()}")
-            exit(1)
-
-    def _create_directories(self):
-        print("\n📂 Ensuring local directories exist...")
-        for dir_path in [self.input_dir, self.output_dir]:
-            dir_path.mkdir(parents=True, exist_ok=True)
-        print("   - ✅ Directories checked.")
+            error_msg = f"Command failed: {' '.join(command)}.nSTDERR: {e.stderr}"
+            print(f"❌ {error_msg}")
+            # Re-raise as library specific error
+            raise YantraDVCError(error_msg) from e
 
     def _ensure_bucket_exists(self):
-        """
-        Uses Boto3 to check if the bucket exists in MinIO/S3.
-        Creates it if it doesn't exist. This fixes the '400 Bad Request' error.
-        
-        Note: Requires MinIO to be running (docker compose up -d).
-        MinIO is configured in docker-compose.yml on port 9000.
-        """
-        print("\n🪣  Verifying S3 Bucket status...")
+        """Checks and creates S3 bucket using Boto3."""
+        print(".n🪣  Verifying S3 Bucket status...")
         bucket_name = self.s3_config["bucket_name"]
-        endpoint = self.s3_config.get("endpoint_url")
 
-        # Configure Boto3 Client
-        # We force 'path' style addressing to ensure localhost compatibility
         s3_client = boto3.client(
             "s3",
-            endpoint_url=endpoint,
+            endpoint_url=self.s3_config.get("endpoint_url"),
             aws_access_key_id=self.s3_config["access_key_id"],
             aws_secret_access_key=self.s3_config["secret_access_key"],
             region_name=self.s3_config.get("region", "us-east-1"),
@@ -81,86 +63,29 @@ class DVCSetup:
 
         try:
             s3_client.head_bucket(Bucket=bucket_name)
-            print(f"   - ✅ Bucket '{bucket_name}' already exists.")
+            print(f"   - ✅ Bucket '{bucket_name}' ready.")
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code == '404':
-                print(f"   - ⚠️ Bucket '{bucket_name}' not found. Creating it...")
+                print(f"   - ⚠️ Bucket '{bucket_name}' not found. Creating...")
                 try:
                     s3_client.create_bucket(Bucket=bucket_name)
-                    print(f"   - ✅ Bucket '{bucket_name}' created successfully!")
+                    print(f"   - ✅ Bucket created.")
                 except Exception as create_err:
-                    print(f"   - ❌ Failed to create bucket: {create_err}")
-                    exit(1)
+                    raise YantraDVCError(f"Failed to create bucket: {create_err}")
+            elif error_code == '403':
+                raise YantraDVCError(f"Access Denied to bucket '{bucket_name}'. Check credentials.")
             else:
-                print(f"   - ❌ Failed to connect to S3/MinIO: {e}")
-                print("     💡 Tip: Ensure MinIO is running: docker compose up -d")
-                print("     💡 Check docker-compose.yml for MinIO configuration (port 9000)")
-                exit(1)
-        except Exception as e:
-            print(f"   - ❌ Unexpected connection error: {e}")
-            exit(1)
-
-    def _configure_dvc(self):
-        print("\n🔄 Configuring DVC for S3...")
-        if not (self.root_dir / ".dvc").exists():
-            self._run_command(["dvc", "init"])
-
-        bucket_name = self.s3_config["bucket_name"]
-        remote_url = f"s3://{bucket_name}/dvc_store"
-
-        # Add Remote
-        self._run_command(["dvc", "remote", "add", "-d", "s3_storage", remote_url, "--force"])
-
-        # S3/MinIO Config
-        endpoint_url = self.s3_config.get("endpoint_url")
-        if endpoint_url:
-            self._run_command(["dvc", "remote", "modify", "s3_storage", "endpointurl", endpoint_url])
-
-        self._run_command(["dvc", "remote", "modify", "s3_storage", "use_ssl", "false"])
-
-        # Credentials (Local)
-        self._run_command(["dvc", "remote", "modify", "--local", "s3_storage",
-                           "access_key_id", self.s3_config["access_key_id"]])
-        self._run_command(["dvc", "remote", "modify", "--local", "s3_storage",
-                           "secret_access_key", self.s3_config["secret_access_key"]])
-        print("   - ✅ DVC remote configured.")
-
-    def _bootstrap_data(self):
-        # Try pulling first (suppress error if empty)
-        print("\n⏬ Attempting to pull existing data...")
-        self._run_command(["dvc", "pull"], check=False)
-
-        # Track and Push
-        print("\n⏫ Tracking and Pushing local data...")
-        self._run_command(["dvc", "add", str(self.input_dir)])
-        self._run_command(["dvc", "add", str(self.output_dir)])
-
-        # Git commit (simplified for setup)
-        self._run_command(["git", "add", ".gitignore", f"{self.input_dir}.dvc", f"{self.output_dir}.dvc"])
-        self._run_command(["git", "commit", "-m", "chore: Initial DVC setup"], check=False)
-
-        # Push to S3 (The moment of truth!)
-        self._run_command(["dvc", "push"])
-        print("   - ✅ Data pushed to MinIO successfully.")
+                raise YantraDVCError(f"S3 Connection Error: {e}")
 
     def setup(self):
-        """
-        Run the complete DVC setup process.
-        
-        This is the main entry point that orchestrates:
-        1. Directory creation
-        2. S3 bucket verification/creation
-        3. DVC configuration
-        4. Initial data bootstrapping
-        """
-        self._create_directories()
-        self._ensure_bucket_exists()  # <--- The critical fix for 400 errors
-        self._configure_dvc()
-        self._bootstrap_data()
-        print("\n🎉 Setup complete! Your DVC environment is ready.")
-
-    # Keep legacy method for backward compatibility
-    def run(self):
-        """Legacy method. Use setup() instead."""
-        self.setup()
+        try:
+            self._create_directories()
+            self._ensure_bucket_exists()
+            self._configure_dvc()
+            self._bootstrap_data()
+            print(".n🎉 Setup complete!")
+        except YantraDVCError as e:
+            print(f".n❌ Setup Failed: {e}")
+            # Re-raise if you want the calling script to handle it
+            raise e
