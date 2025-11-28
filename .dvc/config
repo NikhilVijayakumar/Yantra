@@ -1,0 +1,6 @@
+[core]
+    remote = s3_storage
+['remote "s3_storage"']
+    url = s3://yantra-data/dvc_store
+    endpointurl = http://localhost:9000
+    use_ssl = false

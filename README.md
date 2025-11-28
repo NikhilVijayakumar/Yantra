@@ -124,6 +124,24 @@ df_logs = pd.DataFrame({
 report_path = monitor.generate_report(df_logs, output_path="quality_report.html")
 ```
 
+### Gemini Production Flow Example
+
+A complete production-ready example using Gemini, DVC, MLflow, and Prefect is available in `src/nikhil/yantra/example/production_flow.py`.
+
+**Prerequisites:**
+- Set `GEMINI_API_KEY` in your `.env` file.
+- Ensure `google-genai` is installed.
+
+**Running the Flow:**
+```bash
+python src/nikhil/yantra/example/production_flow.py
+```
+
+This flow will:
+1. Ingest and version data using DVC.
+2. Process data using Gemini (traced by MLflow).
+3. Monitor quality using Evidently and version the report.
+
 ## 📋 Configuration
 
 Create a YAML configuration file (e.g., `mlops_config.yaml`):

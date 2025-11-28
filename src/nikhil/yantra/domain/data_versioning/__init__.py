@@ -1,38 +1,13 @@
-"""Data versioning domain for DVC integration with S3/MinIO."""
+# src/nikhil/yantra/domain/data_versioning/__init__.py
 
-from .dvc_setup import DVCSetup
-from .dvc_tracker import DVCDataTracker
+# 1. Import Interfaces FIRST
 from .data_version_protocol import IDataVersionControl
 
+# 2. Import Setup
+from .dvc_setup import DVCSetup, YantraDVCError
 
-def get_data_versioner(config_path: str) -> DVCDataTracker:
-    """
-    Factory function to get a data version tracker instance.
-    
-    Args:
-        config_path: Path to YAML configuration file containing:
-            - domain_root_path: Input data directory
-            - output_dir_path: Output data directory
-            - s3_config: S3/MinIO configuration
-            - commit_message: Base message for git commits
-        
-    Returns:
-        DVCDataTracker: Configured data version tracker
-        
-    Example:
-        >>> tracker = get_data_versioner("config/app_config.yaml")
-        >>> tracker.sync()  # Pull, validate, track, commit, push
-    """
-    return DVCDataTracker(config_path)
+# 3. Import Tracker LAST (since it depends on the others)
+from .dvc_tracker import DVCDataTracker
 
-
-# Keep legacy import for backward compatibility
-DVCDataTracker.__name__ = "DVCDataTracker"  # Ensure class name is preserved
-
-
-__all__ = [
-    'DVCSetup',
-    'DVCDataTracker',
-    'IDataVersionControl',
-    'get_data_versioner'
-]
+# Define what is available when someone does: from ... import *
+__all__ = ["IDataVersionControl", "DVCSetup", "DVCDataTracker", "YantraDVCError"]

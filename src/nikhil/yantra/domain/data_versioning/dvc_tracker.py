@@ -1,136 +1,92 @@
+# src/nikhil/yantra/domain/data_versioning/dvc_tracker.py
 import subprocess
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+
+from nikhil.yantra.domain.data_versioning import IDataVersionControl
 from nikhil.yantra.utils.yaml_utils import YamlUtils
+from nikhil.yantra.domain.data_versioning.dvc_setup import DVCSetup, YantraDVCError
 
 
-
-class DVCDataTracker:
+class DVCDataTracker(IDataVersionControl):
     """
-    Handles the collaborative workflow of syncing DVC data to S3.
-    It pulls remote changes before tracking and pushing local changes.
-    
-    This class is designed for ongoing data management in a team environment,
-    ensuring data is always synced with the remote S3/MinIO storage.
+    Production implementation of IDataVersionControl.
+    Adheres strictly to the Protocol.
     """
 
     def __init__(self, config_path: str):
-        print("🚀 Initializing DVC Data Tracker...")
         self.config_path = Path(config_path)
         if not self.config_path.exists():
-            print(f"❌ Configuration file not found at: {self.config_path}")
-            exit(1)
+            raise YantraDVCError(f"Config not found: {self.config_path}")
+
         self.config = YamlUtils.yaml_safe_load(config_path)
         self.root_dir = Path.cwd()
-        self.input_dir = Path(self.config["domain_root_path"])
-        self.output_dir = Path(self.config["output_dir_path"])
-        self.base_commit_message = self.config.get("commit_message")
-        if not self.base_commit_message:
-            print("❌ 'commit_message' not found in the config file. Please add it.")
-            exit(1)
-        print("   - ✅ Configuration loaded successfully.")
+        self.input_dir = Path(self.config.get("domain_root_path", "data/input"))
+        self.output_dir = Path(self.config.get("output_dir_path", "data/output"))
+        self.commit_msg = self.config.get("commit_message", "Auto-sync data")
 
     def _run_command(self, command: list, check=True):
-        """Helper to run shell commands and return the result."""
         try:
-            print(f"   - Executing: {' '.join(command)}")
-            result = subprocess.run(command, check=check, text=True, cwd=self.root_dir, capture_output=True)
-            if result.stderr and check:
-                # Filter out non-error DVC outputs that sometimes go to stderr
-                if "WARNING" not in result.stderr and "Everything is up to date" not in result.stderr:
-                    print(f"   - Info: {result.stderr.strip()}")
-            return result
+            # Helper to run shell commands quietly
+            return subprocess.run(
+                command, check=check, text=True, cwd=self.root_dir, capture_output=True
+            )
         except subprocess.CalledProcessError as e:
-            print(f"❌ Command failed: {' '.join(command)}")
-            print(f"   --- STDERR ---:\n{e.stderr.strip()}")
-            print(f"   --- STDOUT ---:\n{e.stdout.strip()}")
-            exit(1)
+            raise YantraDVCError(f"DVC Error: {e.stderr.strip()}") from e
 
-    def _run_validations(self):
-        """
-        Run data validations before pushing.
-        
-        Override this method or inject custom validation logic here.
-        Examples: schema checks, file existence, data quality metrics.
-        """
-        print("\n🔎 Running data validations...")
-        # Insert your specific data validation logic here
-        # e.g., checking if files are empty, schema validation, etc.
-        pass
-        print("   - ✅ All validations passed.")
+    # --- Protocol Implementation ---
 
-    def pull(self):
-        """Pull latest data from remote S3 storage."""
-        print("\n⏬ Pulling latest remote data from S3...")
-        self._run_command(["dvc", "pull"])
-
-    def track(self, path: Path = None):
+    def setup(self) -> None:
         """
-        Track data directories with DVC.
-        
-        Args:
-            path: Specific path to track. If None, tracks configured input/output dirs.
+        Adheres to IDataVersionControl.setup().
+        Delegates to DVCSetup class to keep concerns separated.
         """
-        print("\n🔄 Tracking data directories with DVC...")
-        if path:
-            self._run_command(["dvc", "add", str(path)])
-        else:
-            self._run_command(["dvc", "add", str(self.input_dir)])
-            self._run_command(["dvc", "add", str(self.output_dir)])
+        print("🔧 Delegating setup to DVCSetup...")
+        initializer = DVCSetup(str(self.config_path))
+        initializer.setup()
 
-    def push(self):
-        """Push local data changes to remote S3 storage."""
-        print("\n⏫ Pushing data to S3 remote...")
+    def pull(self) -> None:
+        print("⏬ Pulling data...")
+        # Check if DVC is initialized first
+        if not (self.root_dir / ".dvc").exists():
+            print("   ⚠️ DVC not init, skipping pull.")
+            return
+        self._run_command(["dvc", "pull"], check=False)
+
+    def track(self, path: Path = None) -> None:
+        print("🔄 Tracking data...")
+        target = path if path else self.input_dir
+
+        # FIX: Ensure directory exists before tracking to prevent crash
+        if not target.exists():
+            print(f"   ⚠️ Target {target} does not exist. Creating empty placeholder...")
+            target.mkdir(parents=True, exist_ok=True)
+            # Create a .gitkeep so DVC/Git has something to see
+            (target / ".gitkeep").touch()
+
+        self._run_command(["dvc", "add", str(target)])
+
+    def push(self) -> None:
+        print("⏫ Pushing data...")
         self._run_command(["dvc", "push"])
 
-    def sync(self):
+    def sync(self) -> None:
         """
-        Full synchronization workflow (alias for sync_data).
-        
-        Protocol-compatible method name for IDataVersionControl.
+        Full workflow: Pull -> Track -> Git Commit -> Push
         """
-        self.sync_data()
-
-    def sync_data(self):
-        """
-        Pulls remote data from S3, validates, tracks local data, then commits and pushes back to S3.
-        
-        This is the main workflow for collaborative data management:
-        1. Pull latest changes from remote
-        2. Validate data quality
-        3. Track local changes
-        4. Commit metadata to git
-        5. Push data to remote storage
-        """
-        # 1. Pull latest changes from S3 first
         self.pull()
 
-        # 2. Run validations on local files
-        self._run_validations()
+        # Track input and output specifically
+        self.track(self.input_dir)
+        self.track(self.output_dir)
 
-        # 3. Track data directories to capture local changes
-        self.track()
+        # Git Commit Logic
+        status = self._run_command(["git", "status", "--porcelain"])
+        if ".dvc" in status.stdout:
+            print("📝 Committing DVC changes to Git...")
+            self._run_command(["git", "add", "*.dvc", ".gitignore"])
 
-        git_status_result = self._run_command(["git", "status", "--porcelain"])
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            self._run_command(["git", "commit", "-m", f"{self.commit_msg} ({ts})"])
 
-        # Check if .dvc files are modified
-        if ".dvc" not in git_status_result.stdout:
-            print("\n✅ No new local data changes to commit. Workspace is up-to-date.")
-            return
-
-        # 4. Format and commit the changes
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        final_commit_message = f"{self.base_commit_message} ({timestamp})"
-
-        print("\n📝 Staging and committing data changes to Git...")
-        input_dvc_file = f"{self.input_dir}.dvc"
-        output_dvc_file = f"{self.output_dir}.dvc"
-
-        self._run_command(["git", "add", ".gitignore", input_dvc_file, output_dvc_file])
-        self._run_command(["git", "commit", "-m", final_commit_message])
-        print(f"   - ✅ Committed with message: '{final_commit_message}'")
-
-        # 5. Push your new version to S3
         self.push()
-
-        print("\n🎉 Success! Your workspace is now synced with the S3 remote.")

@@ -1,5 +1,6 @@
-"""Monitoring domain for quality and drift detection using Evidently."""
+from .model_monitor_protocol import IModelMonitor
+from .quality import EvidentlyQualityMonitor
 
-from .quality import QualityMonitor
 
-__all__ = ['QualityMonitor']
+
+__all__ = ["IModelMonitor", "EvidentlyQualityMonitor"]

@@ -1,57 +1,28 @@
-"""Protocol for data versioning systems."""
-
-from typing import Protocol, Optional
+# src/nikhil/yantra/domain/data_versioning/data_version_protocol.py
+from typing import Protocol, runtime_checkable
 from pathlib import Path
 
 
+@runtime_checkable
 class IDataVersionControl(Protocol):
-    """
-    Protocol for data versioning systems (DVC, LakeFS, DagsHub, etc.).
-    
-    Defines the interface for tracking, syncing, and versioning datasets
-    across different storage backends.
-    """
-    
+    """Protocol for data versioning systems."""
+
     def setup(self) -> None:
-        """
-        Initialize the data versioning system.
-        
-        This includes configuring remote storage, creating necessary
-        directories, and setting up tracking metadata.
-        """
+        """Initialize the DVC environment."""
         ...
-    
-    def track(self, path: Path) -> None:
-        """
-        Add a file or directory to version control.
-        
-        Args:
-            path: Path to file or directory to track
-        """
+
+    def track(self, path: Path = None) -> None:
+        """Add data to version control."""
         ...
-    
+
     def pull(self) -> None:
-        """
-        Pull latest data from remote storage.
-        
-        Downloads the most recent version of tracked data from
-        the configured remote storage backend.
-        """
+        """Fetch latest data from remote."""
         ...
-    
+
     def push(self) -> None:
-        """
-        Push local data to remote storage.
-        
-        Uploads local changes to the configured remote storage backend.
-        """
+        """Upload local data to remote."""
         ...
-    
+
     def sync(self) -> None:
-        """
-        Full synchronization workflow.
-        
-        Typically includes: pull latest changes, validate data,
-        track new changes, commit metadata, and push to remote.
-        """
+        """Execute full sync workflow (Pull -> Track -> Push)."""
         ...

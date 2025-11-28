@@ -1,15 +1,15 @@
 # src/nikhil/yantra/domain/observability/service/mlflow_tracker.py
 import mlflow
 from typing import Any, Dict, Optional, ContextManager
-from pathlib import Path
-from nikhil.yantra.domain.observability.interfaces import IExperimentTracker
+
+from nikhil.yantra.domain.observability import IExperimentTracker
 
 
 class MLflowTracker(IExperimentTracker):
     def __init__(self, tracking_uri: str, experiment_name: str):
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name)
-        # Enable GenAI autologging if using libraries like OpenAI/LangChain
+        mlflow.gemini.autolog(log_traces=True, disable=False)
         # mlflow.openai.autolog()
 
     def start_run(self, run_name: str, nested: bool = False) -> Any:
