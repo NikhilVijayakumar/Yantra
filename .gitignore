@@ -207,7 +207,7 @@ marimo/_lsp/
 __marimo__/
 /.idea/.gitignore
 /.idea/vcs.xml
-/data/
+
 /src/nikhil/yantra/example/data/.gitignore
 /src/nikhil/yantra/example/data/input.dvc
 /src/nikhil/yantra/example/data/output.dvc
