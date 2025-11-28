@@ -41,18 +41,18 @@ class DVCSetup:
             return result
         except subprocess.CalledProcessError as e:
             error_msg = f"Command failed: {' '.join(command)}\nSTDERR: {e.stderr}"
-            print(f"❌ {error_msg}")
+            print(f"Error: {error_msg}")
             raise YantraDVCError(error_msg) from e
 
     def _create_directories(self):
         """MISSING METHOD RESTORED: Creates local input/output folders."""
-        print("\n📂 Ensuring local directories exist...")
+        print("\nEnsuring local directories exist...")
         for dir_path in [self.input_dir, self.output_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
-        print("   - ✅ Directories checked.")
+        print("   - Directories checked.")
 
     def _ensure_bucket_exists(self):
-        print("\n🪣  Verifying S3 Bucket status...")
+        print("\nVerifying S3 Bucket status...")
         bucket_name = self.s3_config["bucket_name"]
 
         s3_client = boto3.client(
@@ -67,14 +67,14 @@ class DVCSetup:
 
         try:
             s3_client.head_bucket(Bucket=bucket_name)
-            print(f"   - ✅ Bucket '{bucket_name}' ready.")
+            print(f"   - Bucket '{bucket_name}' ready.")
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code == '404':
-                print(f"   - ⚠️ Bucket '{bucket_name}' not found. Creating...")
+                print(f"   - Bucket '{bucket_name}' not found. Creating...")
                 try:
                     s3_client.create_bucket(Bucket=bucket_name)
-                    print(f"   - ✅ Bucket created.")
+                    print(f"   - Bucket created.")
                 except Exception as create_err:
                     raise YantraDVCError(f"Failed to create bucket: {create_err}")
             elif error_code == '403':
@@ -84,7 +84,7 @@ class DVCSetup:
 
     def _configure_dvc(self):
         """Initializes DVC and sets remote."""
-        print("\n🔄 Configuring DVC for S3...")
+        print("\nConfiguring DVC for S3...")
 
         # 1. Initialize if not exists
         if not (self.root_dir / ".dvc").exists():
@@ -109,15 +109,15 @@ class DVCSetup:
                            "access_key_id", self.s3_config["access_key_id"]])
         self._run_command(["dvc", "remote", "modify", "--local", "s3_storage",
                            "secret_access_key", self.s3_config["secret_access_key"]])
-        print("   - ✅ DVC remote configured.")
+        print("   - DVC remote configured.")
 
     def _bootstrap_data(self):
 
-        print("\n⏬ Attempting to pull existing data...")
+        print("\nAttempting to pull existing data...")
         self._run_command(["dvc", "pull"], check=False)
 
         # Track and Push
-        print("\n⏫ Tracking and Pushing local data...")
+        print("\nTracking and Pushing local data...")
         self._run_command(["dvc", "add", str(self.input_dir)])
         self._run_command(["dvc", "add", str(self.output_dir)])
 
@@ -126,7 +126,7 @@ class DVCSetup:
 
         # Push to S3
         self._run_command(["dvc", "push"])
-        print("   - ✅ Data pushed to MinIO successfully.")
+        print("   - Data pushed to MinIO successfully.")
 
 
 
@@ -142,7 +142,7 @@ class DVCSetup:
             self._ensure_bucket_exists()
             self._configure_dvc()
             self._bootstrap_data()
-            print("\n🎉 DVC Environment Ready!")
+            print("\nDVC Environment Ready!")
         except YantraDVCError as e:
-            print(f"\n❌ Setup Failed: {e}")
+            print(f"\nSetup Failed: {e}")
             raise e

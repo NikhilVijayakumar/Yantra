@@ -41,25 +41,25 @@ class DVCDataTracker(IDataVersionControl):
         Adheres to IDataVersionControl.setup().
         Delegates to DVCSetup class to keep concerns separated.
         """
-        print("🔧 Delegating setup to DVCSetup...")
+        print("Delegating setup to DVCSetup...")
         initializer = DVCSetup(str(self.config_path))
         initializer.setup()
 
     def pull(self) -> None:
-        print("⏬ Pulling data...")
+        print("Pulling data...")
         # Check if DVC is initialized first
         if not (self.root_dir / ".dvc").exists():
-            print("   ⚠️ DVC not init, skipping pull.")
+            print("   DVC not init, skipping pull.")
             return
         self._run_command(["dvc", "pull"], check=False)
 
     def track(self, path: Path = None) -> None:
-        print("🔄 Tracking data...")
+        print("Tracking data...")
         target = path if path else self.input_dir
 
         # FIX: Ensure directory exists before tracking to prevent crash
         if not target.exists():
-            print(f"   ⚠️ Target {target} does not exist. Creating empty placeholder...")
+            print(f"   Target {target} does not exist. Creating empty placeholder...")
             target.mkdir(parents=True, exist_ok=True)
             # Create a .gitkeep so DVC/Git has something to see
             (target / ".gitkeep").touch()
@@ -67,7 +67,7 @@ class DVCDataTracker(IDataVersionControl):
         self._run_command(["dvc", "add", str(target)])
 
     def push(self) -> None:
-        print("⏫ Pushing data...")
+        print("Pushing data...")
         self._run_command(["dvc", "push"])
 
     def sync(self) -> None:
@@ -83,7 +83,7 @@ class DVCDataTracker(IDataVersionControl):
         # Git Commit Logic
         status = self._run_command(["git", "status", "--porcelain"])
         if ".dvc" in status.stdout:
-            print("📝 Committing DVC changes to Git...")
+            print("Committing DVC changes to Git...")
             self._run_command(["git", "add", "*.dvc", ".gitignore"])
 
             ts = datetime.now().strftime("%Y-%m-%d %H:%M")

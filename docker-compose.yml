@@ -90,11 +90,14 @@ services:
       minio:
         condition: service_healthy
     command: >
+      /bin/sh -c "
+      pip install boto3 psycopg2-binary &&
       mlflow server 
       --backend-store-uri postgresql://postgres:password@postgres:5432/mlflow_db
       --host 0.0.0.0
       --port 5000
       --default-artifact-root s3://mlflow-bucket/
+      "
     networks:
       - yantra_net
 
@@ -102,7 +105,7 @@ services:
   # 4. PREFECT SERVER
   # -----------------------------
   prefect:
-    image: prefecthq/prefect:2-latest
+    image: prefecthq/prefect:3-latest
     container_name: yantra_prefect
     restart: always
     ports:
@@ -111,7 +114,7 @@ services:
       # Prefect needs to know where its database is
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:password@postgres:5432/prefect_db
       # Prefect API URL for the UI to talk to the backend
-      PREFECT_API_URL: http://0.0.0.0:4200/api
+      PREFECT_API_URL: http://127.0.0.1:4200/api
       # MinIO/S3 Settings for Prefect Blocks (optional but recommended)
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin

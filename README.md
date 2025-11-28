@@ -19,6 +19,7 @@ Yantra simplifies MLOps workflows by providing:
 
 ### Experiment Tracking (`nikhil.yantra.domain.observability`)
 - **MLflowTracker**: Experiment tracking with MLflow integration
+- **ModelArena**: Comparison framework for LLMs using MLflow Evaluate
 - **Protocol-based design** via `IExperimentTracker`
 - LLM trace logging support
 
@@ -27,7 +28,8 @@ Yantra simplifies MLOps workflows by providing:
 - Retry logic and task monitoring
 
 ### Model Monitoring (`nikhil.yantra.domain.monitoring`)
-- **QualityMonitor**: Generate quality reports using Evidently
+- **EvidentlyQualityMonitor**: Generate quality reports using Evidently
+- **Protocol-based design** via `IModelMonitor`
 - Text evaluation metrics (sentiment, length, etc.)
 
 ## 📦 Installation
@@ -36,6 +38,19 @@ Yantra simplifies MLOps workflows by providing:
 
 - Python 3.8 or higher
 - Git
+- Docker & Docker Compose (running)
+
+### Infrastructure Services
+
+Ensure the following services are running via `docker-compose up -d` before starting:
+
+| Service | URL | Description | Credentials |
+| :--- | :--- | :--- | :--- |
+| **Prefect UI** | [http://localhost:4200](http://localhost:4200) | Workflow Orchestration | None |
+| **MLflow UI** | [http://localhost:5000](http://localhost:5000) | Experiment Tracking | None |
+| **MinIO Console** | [http://localhost:9001](http://localhost:9001) | S3 Storage UI | `minioadmin` / `minioadmin` |
+| **MinIO API** | `http://localhost:9000` | S3 API Endpoint | `minioadmin` / `minioadmin` |
+| **Postgres** | `localhost:5432` | Database | `postgres` / `password` |
 
 > [!IMPORTANT]
 > **Always use a virtual environment!**
@@ -77,7 +92,7 @@ setup.setup()
 
 # Ongoing data management
 tracker = DVCDataTracker(config_path="config/mlops_config.yaml")
-tracker.sync_data()  # Pull → Validate → Track → Push
+tracker.sync()  # Pull → Validate → Track → Push
 ```
 
 ### Experiment Tracking with MLflow
@@ -93,9 +108,10 @@ tracker = MLflowTracker(
 
 # Log experiments
 tracker.log_llm_trace(
-    prompt="What is MLOps?",
-    response="MLOps is...",
-    model_name="gpt-4"
+    name="Chat Completion",
+    inputs={"prompt": "What is MLOps?"},
+    outputs={"response": "MLOps is..."},
+    metadata={"model_name": "gpt-4"}
 )
 ```
 
@@ -113,10 +129,10 @@ def process_data(data_path: str):
 ### Model Monitoring with Evidently
 
 ```python
-from nikhil.yantra.domain.monitoring import QualityMonitor
+from nikhil.yantra.domain.monitoring import EvidentlyQualityMonitor
 import pandas as pd
 
-monitor = QualityMonitor()
+monitor = EvidentlyQualityMonitor()
 df_logs = pd.DataFrame({
     "response": ["Great product!", "Terrible experience"]
 })
@@ -231,8 +247,9 @@ mypy src/
 | `DVCSetup` | Initialize DVC with S3 | `IDataVersionControl` |
 | `DVCDataTracker` | Sync data versions | `IDataVersionControl` |
 | `MLflowTracker` | Track experiments | `IExperimentTracker` |
+| `ModelArena` | Compare LLM performance | N/A |
 | `yantra_task` | Orchestrate workflows | N/A (decorator) |
-| `QualityMonitor` | Monitor model quality | N/A |
+| `EvidentlyQualityMonitor` | Monitor model quality | `IModelMonitor` |
 
 ## 📄 License
 

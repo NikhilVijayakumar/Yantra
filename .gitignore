@@ -217,3 +217,4 @@ __marimo__/
 /src/nikhil/yantra/example/data/.gitignore
 /src/nikhil/yantra/example/data/input.dvc
 /src/nikhil/yantra/example/data/output.dvc
+/error_log.txt
