@@ -1,6 +1,6 @@
 [project]
 name = "Yantra"
-version = "1.0.1"
+version = "1.0.2"
 description = "Yantra is a unified MLOps library that provides clean, protocol-based interfaces for essential MLOps tools including DVC, MLflow, Prefect, and Evidently."
 dependencies = [
     "PyYAML == 6.0.3",
@@ -10,7 +10,7 @@ dependencies = [
     "prefect == 3.6.4",
     "evidently ==  0.7.17",
     "nltk == 3.9.2",
-    "pandas == 2.3.3",
+    "pandas == 2.3.2",
     "numpy == 2.2.6",
     "watchfiles == 1.1.1",
     "python-dotenv == 1.2.1"
