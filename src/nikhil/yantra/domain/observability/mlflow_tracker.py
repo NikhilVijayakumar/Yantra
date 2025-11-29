@@ -4,6 +4,7 @@ import contextlib
 import mlflow
 from typing import Any, Dict, Optional, ContextManager
 
+import pandas as pd
 from yantra.domain.observability import IExperimentTracker
 
 
@@ -12,7 +13,25 @@ class MLflowTracker(IExperimentTracker):
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name)
 
-        # mlflow.openai.autolog()
+    def enable_system_metrics(self) -> None:
+        # This starts a background thread to monitor CPU/RAM/GPU
+        mlflow.enable_system_metrics_logging()
+
+    def log_dataset(self, dataset_source: Any, context: str = "input", name: Optional[str] = None):
+        """
+        Wraps mlflow.log_input.
+        If dataset_source is a DataFrame, we convert it to an MLflow dataset.
+        """
+        try:
+            # Assuming dataset_source is a Pandas DataFrame
+            if isinstance(dataset_source, pd.DataFrame):
+                dataset = mlflow.data.from_pandas(dataset_source, name=name)
+                mlflow.log_input(dataset, context=context)
+            else:
+                # Fallback or specific logic for other types if needed
+                print(f"Warning: log_dataset received non-DataFrame type: {type(dataset_source)}")
+        except Exception as e:
+            print(f"Failed to log dataset: {e}")
 
     def autolog_crewai(self) -> None:
         mlflow.crewai.autolog()

@@ -33,3 +33,15 @@ class IExperimentTracker(Protocol):
 
     def autolog_gemini(self) -> None: ...
 
+    def enable_system_metrics(self) -> None:
+        """Enables automatic logging of CPU, RAM, and GPU metrics."""
+        ...
+
+    def log_dataset(self, dataset_source: Any, context: str = "input") -> None:
+        """
+        Logs a dataset definition to MLflow.
+        :param dataset_source: Usually a Pandas DataFrame or numpy array.
+        :param context: 'input', 'output', 'reference', etc.
+        """
+        ...
+
