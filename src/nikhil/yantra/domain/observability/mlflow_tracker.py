@@ -11,8 +11,14 @@ class MLflowTracker(IExperimentTracker):
     def __init__(self, tracking_uri: str, experiment_name: str):
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name)
-        mlflow.gemini.autolog(log_traces=True, disable=False)
+
         # mlflow.openai.autolog()
+
+    def autolog_crewai(self) -> None:
+        mlflow.crewai.autolog()
+
+    def autolog_gemini(self) -> None:
+        mlflow.gemini.autolog(log_traces=True, disable=False)
 
     def start_run(self, run_name: str, nested: bool = False) -> Any:
         return mlflow.start_run(run_name=run_name, nested=nested)

@@ -1,6 +1,8 @@
 # src/nikhil/yantra/domain/observability/experiment_tracker_protocol.py
 from typing import Protocol, Any, Dict, Optional, List, ContextManager
 
+import mlflow
+
 
 class IExperimentTracker(Protocol):
     """Protocol for logging experiments with Modern GenAI support."""
@@ -26,3 +28,8 @@ class IExperimentTracker(Protocol):
         ...
 
     def end_run(self) -> None: ...
+
+    def autolog_crewai(self)-> None: ...
+
+    def autolog_gemini(self) -> None: ...
+
