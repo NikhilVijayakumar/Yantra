@@ -1,4 +1,6 @@
 # src/nikhil/yantra/domain/observability/service/mlflow_tracker.py
+import contextlib
+
 import mlflow
 from typing import Any, Dict, Optional, ContextManager
 
@@ -51,8 +53,15 @@ class MLflowTracker(IExperimentTracker):
                 span.set_outputs(outputs)
                 span.set_attributes(metadata or {})
 
-    def start_span(self, name: str, inputs: Optional[Dict] = None) -> ContextManager:
-        return mlflow.start_span(name=name, inputs=inputs)
+    @contextlib.contextmanager
+    def start_span(self, name: str, inputs: Optional[Dict] = None):
+        """
+        Starts an MLflow span and optionally sets its inputs.
+        """
+        with mlflow.start_span(name=name) as span:
+            if inputs:
+                span.set_inputs(inputs)
+            yield span
 
     def end_run(self):
         mlflow.end_run()
