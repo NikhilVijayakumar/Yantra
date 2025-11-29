@@ -1,7 +1,7 @@
 # src/nikhil/yantra/domain/orchestration/context.py
 from typing import Optional
 
-from nikhil.yantra.domain.observability import IExperimentTracker
+from yantra.domain.observability import IExperimentTracker
 
 
 class YantraContext:

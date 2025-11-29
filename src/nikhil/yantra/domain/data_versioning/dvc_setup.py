@@ -6,7 +6,7 @@ from pathlib import Path
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from nikhil.yantra.utils.yaml_utils import YamlUtils
+from yantra.utils import YamlUtils
 
 
 # Define custom exceptions for the library

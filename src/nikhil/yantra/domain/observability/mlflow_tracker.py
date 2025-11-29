@@ -2,7 +2,7 @@
 import mlflow
 from typing import Any, Dict, Optional, ContextManager
 
-from nikhil.yantra.domain.observability import IExperimentTracker
+from yantra.domain.observability import IExperimentTracker
 
 
 class MLflowTracker(IExperimentTracker):

@@ -10,7 +10,7 @@ from evidently import Report
 from evidently.legacy.pipeline.column_mapping import ColumnMapping
 from evidently.presets import TextEvals
 
-from nikhil.yantra.domain.monitoring.model_monitor_protocol import IModelMonitor
+from yantra.domain.monitoring import IModelMonitor
 
 logger = logging.getLogger(__name__)
 

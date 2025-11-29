@@ -2,7 +2,8 @@
 import functools
 import inspect
 from prefect import task, get_run_logger
-from nikhil.yantra.domain.orchestration.context import YantraContext
+
+from yantra.domain.orchestration.context import YantraContext
 
 
 def yantra_task(

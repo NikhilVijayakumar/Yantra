@@ -3,9 +3,8 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-from nikhil.yantra.domain.data_versioning import IDataVersionControl
-from nikhil.yantra.utils.yaml_utils import YamlUtils
-from nikhil.yantra.domain.data_versioning.dvc_setup import DVCSetup, YantraDVCError
+from yantra.domain.data_versioning import IDataVersionControl, YantraDVCError, DVCSetup
+from yantra.utils import YamlUtils
 
 
 class DVCDataTracker(IDataVersionControl):
