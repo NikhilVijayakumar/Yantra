@@ -10,7 +10,8 @@ def yantra_task(
         name: str = None,
         retries: int = 3,
         retry_delay_seconds: int = 5,
-        log_prints: bool = True
+        log_prints: bool = True,
+        **kwargs
 ):
     """
     Dual-purpose decorator:
@@ -24,7 +25,8 @@ def yantra_task(
             name=name or func.__name__,
             retries=retries,
             retry_delay_seconds=retry_delay_seconds,
-            log_prints=log_prints
+            log_prints=log_prints,
+            **kwargs
         )
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
