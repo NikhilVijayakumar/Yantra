@@ -82,11 +82,11 @@ class EvidentlyQualityMonitor(IModelMonitor):
         # Configure report
         report = Report(metrics=[TextEvals()])
         try:
-            report.run(
+            my_eval =report.run(
                 current_data=df_logs,
                 reference_data=None,  # No baseline; simple profiling run
             )
-            report.save_html(output_path)
+            my_eval.save_html(output_path)
             logger.info(f"Quality Report successfully saved to: {output_path}")
             return output_path
         except Exception as exc:
