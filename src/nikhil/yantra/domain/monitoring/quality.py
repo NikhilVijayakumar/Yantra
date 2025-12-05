@@ -1,94 +1,154 @@
-# src/nikhil/yantra/domain/monitoring/quality.py
 import logging
 import os
-
-import nltk
 import pandas as pd
+from typing import Dict, Any, Optional, List
+
 from evidently import Report
 from evidently.legacy.pipeline.column_mapping import ColumnMapping
-from evidently.presets import TextEvals
+from evidently.metrics.column_statistics import MeanValue, MinValue, MaxValue, QuantileValue, MissingValueCount, UniqueValueCount
 
 from yantra.domain.monitoring import IModelMonitor
+from yantra.domain.monitoring.llm_judge import DefaultLlmJudge
+from yantra.domain.monitoring.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
+
+
 class EvidentlyQualityMonitor(IModelMonitor):
     """
-    A modern Evidently-based implementation of the IModelMonitor protocol.
-    Provides text-quality evaluations (sentiment, length, OOV, etc.)
-    for LLM-generated responses inside logs.
+    Monitor that uses a custom LLM Judge to score text quality and then uses Evidently
+    to report on the score distribution.
     """
-    # Required NLTK resources for text analysis
-    NLTK_REQUIREMENTS = [
-        ("corpora/wordnet", "wordnet"),
-        ("corpora/omw-1.4", "omw-1.4"),
-        ("sentiment/vader_lexicon.zip", "vader_lexicon"),
-        ("corpora/words", "words"),
-    ]
-    def __init__(self) -> None:
-        self._ensure_nltk_resources()
-    # -------------------------------------------------------------------------
-    # Internal Helpers
-    # -------------------------------------------------------------------------
-    def _download_if_missing(self, check_path: str, pkg_name: str) -> None:
-        """Download an NLTK resource only if missing."""
-        try:
-            nltk.data.find(check_path)
-        except LookupError:
-            logger.info(f"Downloading missing NLTK resource: {pkg_name}")
-            nltk.download(pkg_name, quiet=True)
-    def _ensure_nltk_resources(self) -> None:
+
+    def __init__(self, judge: Optional[Any] = None, api_key: Optional[str] = None):
         """
-        Ensures required NLTK corpora exist.
-        Skips downloads if already cached (ideal for Docker or CI environments).
-        """
-        logger.debug("Checking required NLTK resources...")
-        for check_path, pkg_name in self.NLTK_REQUIREMENTS:
-            self._download_if_missing(check_path, pkg_name)
-        logger.debug("NLTK resource validation complete.")
-    # -------------------------------------------------------------------------
-    # Public API
-    # -------------------------------------------------------------------------
-    def generate_report(
-        self,
-        df_logs: pd.DataFrame,
-        output_path: str = "quality_report.html",
-        text_column: str = "response",
-    ) -> str:
-        """
-        Generates an Evidently text-quality report and saves it as an HTML file.
         Args:
-            df_logs: Pandas DataFrame with LLM logs.
-            output_path: Path where the HTML report should be saved.
-            text_column: Column containing LLM-generated text.
-        Returns:
-            Path to the saved HTML report.
+            judge: Optional IModelJudge instance. If not provided, will attempt to create
+                   DefaultLlmJudge using GeminiClient.
+            api_key: Gemini API Key. Used if judge is not provided.
         """
-        logger.info(f"Generating Evidently Text Quality Report for '{text_column}'.")
-        # Validation
-        if text_column not in df_logs.columns:
-            raise ValueError(
-                f"Column '{text_column}' not found in DataFrame. "
-                f"Available columns: {list(df_logs.columns)}"
-            )
-        # Ensure absolute path to avoid saving in venv or unexpected CWD
-        output_path = os.path.abspath(output_path)
-        # Ensure parent directory exists
-        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        # Column mapping required by Evidently (modern API)
-        column_mapping = ColumnMapping(
-            task=None,
-            text_features=[text_column],
-        )
-        # Configure report
-        report = Report(metrics=[TextEvals()])
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        
+        if judge:
+            self.judge = judge
+        elif self.api_key:
+            # Fallback: Create default judge with Gemini
+            client = GeminiClient(api_key=self.api_key)
+            self.judge = DefaultLlmJudge(llm_client=client)
+        else:
+            self.judge = None
+            logger.warning("No judge provided and no API Key found. Monitoring may fail if LLM is needed.")
+
+    def generate_report(
+            self,
+            df_logs: pd.DataFrame,
+            output_path: str = "quality_report.html",
+            text_column: str = "response",
+            rules: Optional[Dict[str, Any]] = None
+    ) -> str:
+
+        logger.info(f"Generating Quality Report for column: {text_column}")
+        current_rules = rules or {}
+        
+        # We will track which columns are generated by the LLM
+        generated_columns = []
+
+        # 1. Calculate Scores Manually
+        if self.judge:
+            logger.info("Running LLM Judge on rows...")
+            results_list = []
+            
+            # Iterate and score
+            for index, row in df_logs.iterrows():
+                try:
+                    text_input = row[text_column]
+                    # verify text_input is string
+                    if not isinstance(text_input, str):
+                        text_input = str(text_input)
+                        
+                    result = self.judge.judge(prompt=text_input, rules=current_rules)
+                    # result is expected to be a dict, e.g. {"score": 0.9, "reason": "Good", "category": "A"}
+                    if isinstance(result, dict):
+                        results_list.append(result)
+                    else:
+                        logger.warning(f"Judge returned non-dict result for row {index}: {result}")
+                        results_list.append({})
+                        
+                except Exception as e:
+                    logger.error(f"Error scoring row {index}: {e}")
+                    results_list.append({})
+            
+            # Create a DataFrame from the results
+            if results_list:
+                df_results = pd.DataFrame(results_list)
+                # Prefix columns to avoid collisions and identify them easily
+                df_results = df_results.add_prefix("llm_")
+                
+                # Merge into main dataframe
+                # We assume index alignment is preserved (iterrows -> append order)
+                df_logs = pd.concat([df_logs.reset_index(drop=True), df_results.reset_index(drop=True)], axis=1)
+                generated_columns = df_results.columns.tolist()
+                logger.info(f"Scoring complete. Added columns: {generated_columns}")
+            else:
+                logger.warning("No results obtained from Judge.")
+            
+        else:
+            logger.warning("Skipping LLM scoring: No judge available.")
+
+        # 2. Configure Report
+        # Dynamically add metrics based on column types
+        metrics = []
+        
+        from pandas.api.types import is_numeric_dtype, is_bool_dtype, is_string_dtype
+
+        for col in generated_columns:
+            if col not in df_logs.columns:
+                continue
+                
+            # Skip "explanation" or "reason" text columns from heavy stats, maybe just missing count
+            # Heuristic: if column name contains "explanation", "reason", "comment", "feedback"
+            # AND it is a string type, treat as text
+            is_text_field = any(x in col.lower() for x in ["explanation", "reason", "comment", "feedback"])
+            
+            if is_numeric_dtype(df_logs[col]) and not is_text_field:
+                logger.info(f"Adding numeric metrics for {col}")
+                metrics.extend([
+                    MeanValue(column=col),
+                    MinValue(column=col),
+                    MaxValue(column=col),
+                    QuantileValue(column=col, quantile=0.5),
+                    MissingValueCount(column=col)
+                ])
+            elif (is_bool_dtype(df_logs[col]) or is_string_dtype(df_logs[col])) and not is_text_field:
+                # Categorical or Boolean
+                logger.info(f"Adding categorical metrics for {col}")
+                metrics.append(UniqueValueCount(column=col))
+                metrics.append(MissingValueCount(column=col))
+            else:
+                # Text or other
+                logger.info(f"Adding basic metrics for text/other column {col}")
+                metrics.append(MissingValueCount(column=col))
+
+        if not metrics:
+            logger.warning("No metrics configured. Report might be empty.")
+
+        # 3. Create Report
+        report = Report(metrics=metrics)
+
+        # 4. Run Report
         try:
-            my_eval =report.run(
-                current_data=df_logs,
-                reference_data=None,  # No baseline; simple profiling run
-            )
-            my_eval.save_html(output_path)
-            logger.info(f"Quality Report successfully saved to: {output_path}")
+            # Column mapping is usually optional if metrics explicitly specify columns
+            # But passing it is good practice
+            col_map = ColumnMapping() 
+            
+            evidently_report = report.run(reference_data=None, current_data=df_logs)
+
+            # 5. Save
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            evidently_report.save_html(output_path)
+            logger.info(f"Report saved to {output_path}")
             return output_path
-        except Exception as exc:
-            logger.error("Failed to generate Evidently report.", exc_info=True)
-            raise RuntimeError(f"Evidently report generation failed: {exc}") from exc
+
+        except Exception as e:
+            logger.error(f"Evidently Report Generation Failed: {e}")
+            raise
