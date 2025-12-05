@@ -34,7 +34,8 @@ class MLflowTracker(IExperimentTracker):
             print(f"Failed to log dataset: {e}")
 
     def autolog_crewai(self) -> None:
-        mlflow.crewai.autolog()
+        mlflow.crewai.autolog(log_traces=True, disable=False)
+        mlflow.litellm.autolog(log_traces=True, disable=False)
 
     def autolog_gemini(self) -> None:
         mlflow.gemini.autolog(log_traces=True, disable=False)
