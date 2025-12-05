@@ -47,7 +47,7 @@ This document tracks all external framework dependencies in Yantra, assesses the
 
 ---
 
-### 2. MLflow (>= 2.10.0)
+### 2. MLflow (>= 2.14.0)
 **Category:** Experiment Tracking  
 **Risk Level:** 🟡 **MEDIUM** - Observability dependency
 
@@ -77,7 +77,7 @@ This document tracks all external framework dependencies in Yantra, assesses the
 
 ---
 
-### 3. Prefect (>= 2.14.0)
+### 3. Prefect (>= 3.6.4)
 **Category:** Workflow Orchestration  
 **Risk Level:** 🟡 **MEDIUM** - Orchestration dependency
 
@@ -92,10 +92,7 @@ This document tracks all external framework dependencies in Yantra, assesses the
 - Direct dependency on Prefect decorators
 
 **Migration Path:**
-1. Create `ITaskOrchestrator` protocol
-2. Create `PrefectOrchestrator` adapter
-3. Create `AirflowOrchestrator` as alternative
-4. Refactor `yantra_task` to use protocol
+- Use `yantra_task` decorator as the single point of coupling.
 
 **Alternative Frameworks:**
 - Apache Airflow
@@ -111,14 +108,14 @@ This document tracks all external framework dependencies in Yantra, assesses the
 
 ---
 
-### 4. Evidently (>= 0.4.0)
+### 4. Evidently (>= 0.7.17)
 **Category:** Model Monitoring  
 **Risk Level:** 🟢 **LOW** - Isolated monitoring feature
 
 **Usage:**
 - Quality monitoring in `domain/monitoring/`
 - Text evaluation metrics
-- Report generation
+- **LLM-as-a-Judge integration**
 
 **Isolation Status:** ✅ **Excellent**
 - Used only in `QualityMonitor` class
@@ -141,7 +138,27 @@ This document tracks all external framework dependencies in Yantra, assesses the
 
 ---
 
-### 5. Boto3 (>= 1.34.0)
+### 5. Google GenAI (>= 1.53.0)
+**Category:** LLM Provider Client
+**Risk Level:** 🟢 **LOW** - Well-encapsulated
+
+**Usage:**
+- `GeminiClient` implementation for LLM calls.
+- Encapsulated behind `ILlmClient` protocol.
+
+**Isolation Status:** ✅ **Excellent**
+- Only used within `GeminiClient`.
+- Swappable with other providers (OpenAI, Anthropic) via protocol.
+
+**Migration Path:**
+- Implement `ILlmClient` for other providers.
+
+**Action Items:**
+- ✅ Protocol defined (`ILlmClient`).
+
+---
+
+### 6. Boto3 (>= 1.34.0)
 **Category:** Cloud Storage Client  
 **Risk Level:** 🟢 **LOW** - Standard AWS SDK
 

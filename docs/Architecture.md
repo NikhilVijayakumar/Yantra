@@ -172,16 +172,35 @@ class MLflowTracker(IExperimentTracker):
 
 ### Orchestration Pattern
 
-**Decorator-Based:**
-`yantra_task` wraps Prefect functionality with potential custom logging.
+**Decorator-Based Tracing:**
+`yantra_task` wraps Prefect functionality and automatically injects an MLflow Span for observability.
 
 ```python
 from nikhil.yantra.domain.orchestration import yantra_task
 
 @yantra_task(retries=3)
 def train_model(data_path: str):
-    # Automatic retry logic from Prefect
+    # 1. Registered as Prefect Task
+    # 2. Wrapped in MLflow Span (inputs/outputs logged)
+    # 3. Automatic error handling/logging
     ...
+```
+
+### Model Monitoring / LLM Evaluation Pattern
+
+**Protocol-Based Judge:**
+Decouples the evaluation logic (`IModelJudge`) from the LLM provider (`ILlmClient`) and the reporting tool (`IModelMonitor`).
+
+```python
+# 1. Client (Gemini, OpenAI, etc.)
+client: ILlmClient = GeminiClient(api_key=...)
+
+# 2. Judge (Rule-based evaluation)
+judge: IModelJudge = DefaultLlmJudge(llm_client=client)
+
+# 3. Monitor (Report Generation)
+monitor: IModelMonitor = EvidentlyQualityMonitor(judge=judge)
+monitor.generate_report(df_logs, rules=custom_rules)
 ```
 
 ---

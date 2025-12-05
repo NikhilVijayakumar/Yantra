@@ -24,12 +24,14 @@ Yantra simplifies MLOps workflows by providing:
 - LLM trace logging support
 
 ### Workflow Orchestration (`nikhil.yantra.domain.orchestration`)
-- **yantra_task**: Custom Prefect decorator with auto-logging
+- **yantra_task**: Custom Prefect decorator with **MLflow Span integration**
+- Automated observability (input/output tracing)
 - Retry logic and task monitoring
 
 ### Model Monitoring (`nikhil.yantra.domain.monitoring`)
-- **EvidentlyQualityMonitor**: Generate quality reports using Evidently
-- **Protocol-based design** via `IModelMonitor`
+- **Protocol-based LLM Judge**: `IModelJudge` and `ILlmClient` for flexible evaluation
+- **Evidently Integration**: `EvidentlyQualityMonitor` for generating quality reports using LLM scores
+- **Custom Metrics**: Support for complex, rule-based custom evaluation logic (LLM-as-a-Judge)
 - Text evaluation metrics (sentiment, length, etc.)
 
 ## 📦 Installation
@@ -250,6 +252,8 @@ mypy src/
 | `ModelArena` | Compare LLM performance | N/A |
 | `yantra_task` | Orchestrate workflows | N/A (decorator) |
 | `EvidentlyQualityMonitor` | Monitor model quality | `IModelMonitor` |
+| `DefaultLlmJudge` | Rule-based LLM evaluation | `IModelJudge` |
+| `GeminiClient` | LLM Provider Client | `ILlmClient` |
 
 ## 📄 License
 
