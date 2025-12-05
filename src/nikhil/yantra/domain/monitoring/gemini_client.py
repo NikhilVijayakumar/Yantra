@@ -1,62 +1,109 @@
 import json
 import logging
-from typing import Optional, Generator, Union, Dict, Any
+from typing import Optional, Any, Dict
 
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from yantra.domain.monitoring.llm_client_protocol import ILlmClient
+from google import genai
+from google.genai import types
+
+# Assuming ILlmClient is imported from your protocol file
+# from yantra.domain.monitoring.llm_client_protocol import ILlmClient
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiClient(ILlmClient):
+class GeminiClient:  # strictly implements ILlmClient
     """
-    Robust Gemini client implementation with safety handling.
+    Robust Gemini client implementation using google-genai SDK (v1.0+).
     """
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash", **genai_kwargs):
-        genai.configure(api_key=api_key)
+        """
+        Args:
+            api_key: Google GenAI API key.
+            model: Model ID (e.g., 'gemini-2.0-flash').
+            **genai_kwargs: Default generation parameters (e.g., temperature=0.7).
+        """
+        self.client = genai.Client(api_key=api_key)
         self.model_name = model
-        # Default safety settings to avoid blocking harmless eval requests
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
-        self.genai_kwargs = genai_kwargs
-        self._model = genai.GenerativeModel(model_name=self.model_name)
+
+        # Default safety: Block nothing to allow judge/evaluation tasks
+        self.safety_settings = [
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ]
+
+        self.default_genai_kwargs = genai_kwargs
 
     def _extract_text(self, response) -> str:
-        """Safe extraction handling blocked content."""
+        """Safe extraction handling blocked content or API artifacts."""
         try:
-            # Check if blocked by safety filters
-            if hasattr(response, "prompt_feedback") and response.prompt_feedback:
-                if response.prompt_feedback.block_reason:
-                    logger.warning(f"Response blocked: {response.prompt_feedback}")
-                    return json.dumps({"score": 0.0, "explanation": "Blocked by Safety Filter"})
+            # 1. Check if the model refused to answer (Safety)
+            if response.candidates:
+                first_candidate = response.candidates[0]
+                if first_candidate.finish_reason == "SAFETY":
+                    logger.warning(f"Response blocked. Reason: {first_candidate.finish_reason}")
+                    return json.dumps({
+                        "score": 0.0,
+                        "explanation": f"Blocked by Safety Filter ({first_candidate.finish_reason})"
+                    })
 
-            if hasattr(response, "text"):
+            # 2. Attempt to return text
+            if response.text:
                 return response.text
 
-            if hasattr(response, "candidates") and response.candidates:
-                return response.candidates[0].content.parts[0].text
-
             return ""
+
+        except ValueError:
+            # response.text raises ValueError if content is empty/blocked
+            return json.dumps({"score": 0.0, "explanation": "Empty/Blocked Response"})
         except Exception as e:
-            logger.error(f"Error extracting text from Gemini response: {e}")
+            logger.error(f"Error extracting text: {e}")
             return ""
 
     def generate(self, prompt: str, **kwargs) -> str:
-        params = {**self.genai_kwargs, **kwargs}
+        """
+        Generates a response for the given prompt, adhering to ILlmClient.
+
+        Maps 'prompt' -> SDK 'contents'
+        Maps 'kwargs' -> SDK 'config'
+        """
+        # Merge default kwargs (from init) with request-specific kwargs
+        # Request kwargs take precedence
+        merged_params = {**self.default_genai_kwargs, **kwargs}
+
+        # Construct the configuration object required by the new SDK
+        # We explicitly set safety settings here to ensure consistency
+        config = types.GenerateContentConfig(
+            safety_settings=self.safety_settings,
+            **merged_params
+        )
+
         try:
-            response = self._model.generate_content(
-                prompt,
-                safety_settings=self.safety_settings,
-                **params
+            # Call the SDK
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,  # PROTOCOL (prompt) -> SDK (contents)
+                config=config
             )
+
+            # Return string as required by ILlmClient -> str
             return self._extract_text(response)
+
         except Exception as e:
             logger.error(f"Gemini generation failed: {e}")
-            # Fail gracefully so the pipeline doesn't crash on one row
+            # Return a JSON string so downstream JSON parsers (if any) handle it gracefully
             return json.dumps({"score": 0.0, "explanation": f"API Error: {str(e)}"})
