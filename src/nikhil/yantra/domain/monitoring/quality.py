@@ -108,7 +108,7 @@ class EvidentlyQualityMonitor(IModelMonitor):
             # Skip "explanation" or "reason" text columns from heavy stats, maybe just missing count
             # Heuristic: if column name contains "explanation", "reason", "comment", "feedback"
             # AND it is a string type, treat as text
-            is_text_field = any(x in col.lower() for x in ["explanation", "reason", "comment", "feedback"])
+            is_text_field = any(x in col.lower() for x in ["explanation", "reason", "comment", "feedback", "rationale", "json"])
             
             if is_numeric_dtype(df_logs[col]) and not is_text_field:
                 logger.info(f"Adding numeric metrics for {col}")
@@ -145,8 +145,9 @@ class EvidentlyQualityMonitor(IModelMonitor):
 
             # 5. Save
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-            evidently_report.save_html(output_path)
-            logger.info(f"Report saved to {output_path}")
+            evidently_report.save_html(f"{output_path}.html")
+            evidently_report.save_json(f"{output_path}.json")
+            logger.info(f"Report saved to {output_path}.html and {output_path}.json")
             return output_path
 
         except Exception as e:
