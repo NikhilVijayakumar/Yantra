@@ -28,13 +28,32 @@ Where:
 - $d$ is the retry delay (`retry_delay_seconds: int = 5`)
 - $l$ is the log flag (`log_prints: bool = True`)
 
-The execution of $f'$ follows:
+### Decorator Composition Model
+
+The dual wrapping creates a **3-layer function stack**:
+
+$$
+\text{call}(f'(\mathbf{x})) = \underbrace{\text{Prefect}}_{\text{Layer 1}} \Big( \underbrace{\text{MLflow Span}}_{\text{Layer 2}} \Big( \underbrace{f(\mathbf{x})}_{\text{Layer 3}} \Big) \Big)
+$$
+
+Layer responsibilities:
+
+| Layer | Component | Responsibility | Failure Handling |
+|:---|:---|:---|:---|
+| 1 (Outer) | Prefect Task | Retry logic, scheduling, DAG | Retries $r$ times with delay $d$ |
+| 2 (Middle) | MLflow Span | Tracing, input/output logging | Sets error attributes, re-raises |
+| 3 (Inner) | Original Function | Business logic | Raises original exception |
+
+### Execution State Machine
+
+The execution follows a conditional state machine:
 
 $$
 f'(\mathbf{x}) =
 \begin{cases}
-f(\mathbf{x}) & \text{if } \tau = \emptyset \text{ (no tracker)} \\
-\text{span}\Big(f(\mathbf{x}), \; \sigma_{in}=\text{bind}(f, \mathbf{x}), \; \sigma_{out}=\text{truncate}(y, 1000)\Big) & \text{if } \tau \neq \emptyset
+f(\mathbf{x}) & \text{if } \tau = \emptyset \text{ (no tracker — graceful degradation)} \\
+\text{span}\Big(f(\mathbf{x}), \; \sigma_{in}=\text{bind}(f, \mathbf{x}), \; \sigma_{out}=\text{truncate}(y, 1000)\Big) & \text{if } \tau \neq \emptyset \text{ (success)} \\
+\text{span}\Big(\bot, \; \text{status}=\text{"error"}, \; \text{msg}=\text{str}(e)\Big) \to \text{raise}(e) & \text{if } \tau \neq \emptyset \text{ (failure)}
 \end{cases}
 $$
 
@@ -43,6 +62,22 @@ Where:
 - $\text{bind}(f, \mathbf{x}) = \texttt{inspect.signature}(f).\texttt{bind}(\mathbf{x}).\texttt{arguments}$
 - $y = f(\mathbf{x})$ is the return value
 - $\text{truncate}(y, 1000) = \texttt{str}(y)[:1000]$
+
+### Retry-Trace Interaction Model
+
+When Prefect retries a failed task, each retry creates a **new MLflow span**:
+
+$$
+\text{retry}(f', \mathbf{x}, r) = \bigcup_{i=0}^{r} \text{span}_i(f(\mathbf{x}))
+$$
+
+The final trace contains $\leq r+1$ spans for a single task, each with its own status:
+
+$$
+\text{spans}(f') = \{(\text{span}_0, \text{error}), (\text{span}_1, \text{error}), \ldots, (\text{span}_k, \text{success})\}
+$$
+
+Where $k \leq r$ is the successful retry index. This creates a complete **audit trail** of all retry attempts.
 
 ### Variable Mapping
 
@@ -88,6 +123,30 @@ Where:
 - $\mathbf{D} = \{p_i: d_i\}$ are default values
 - $\text{resolve}$ applies positional-first, then keyword, then default precedence
 
+### Resolution Precedence
+
+The binding follows a strict priority: positional args override defaults, keyword args override positional args for the same parameter:
+
+$$
+\text{resolve}(p_i) =
+\begin{cases}
+a_i & \text{if } p_i \text{ is matched positionally (index } i < j\text{)} \\
+kw_i & \text{if } p_i \in \mathbf{KW} \\
+d_i & \text{if } p_i \in \mathbf{D} \text{ (default value applied)} \\
+\bot \text{ (TypeError)} & \text{otherwise (missing required param)}
+\end{cases}
+$$
+
+### Binding Example
+
+For a function `def process(data, batch_size=32, verbose=False)`:
+
+| Call | `inputs` Dict | Notes |
+|:---|:---|:---|
+| `process(df)` | `{"data": df, "batch_size": 32, "verbose": False}` | Defaults applied |
+| `process(df, 64)` | `{"data": df, "batch_size": 64, "verbose": False}` | Positional override |
+| `process(df, verbose=True)` | `{"data": df, "batch_size": 32, "verbose": True}` | Keyword override |
+
 ### Variable Mapping
 
 | LaTeX Symbol | Code Variable | Type | Location |
@@ -111,7 +170,7 @@ Where:
 
 ### Description
 
-The `YantraContext` class implements a Singleton-style context that holds the active experiment tracker. This eliminates the need to pass tracker instances through every function call in the pipeline.
+The `YantraContext` class implements a Singleton-style context that holds the active experiment tracker. It uses **class-level state** with `@classmethod` accessors, providing a global dependency injection (DI) container without requiring instance creation.
 
 ### Formal Representation
 
@@ -125,11 +184,41 @@ $$
 \text{get}: \mathcal{C} \rightarrow \tau \cup \{\emptyset\}
 $$
 
-The singleton property ensures:
+### Singleton Guarantee
+
+The class-level state ensures global singleton behavior:
 
 $$
-\forall \text{ invocations } i, j: \quad \mathcal{C}_i.\text{get\_tracker}() = \mathcal{C}_j.\text{get\_tracker}() \iff \text{set was called between } i \text{ and } j
+\forall \text{ modules } M_1, M_2: \quad M_1.\text{YantraContext}._\text{tracker} \equiv M_2.\text{YantraContext}._\text{tracker}
 $$
+
+Because Python modules are singletons, and class-level attributes are shared across all imports and references to the same class:
+
+$$
+\text{id}(\text{YantraContext}_{module\_1}) = \text{id}(\text{YantraContext}_{module\_2})
+$$
+
+### Service Locator Pattern Analysis
+
+`YantraContext` implements the **Service Locator** pattern from Martin Fowler's enterprise patterns:
+
+| Pattern Aspect | Service Locator | YantraContext |
+|:---|:---|:---|
+| Registration | `locator.register(service)` | `YantraContext.set_tracker(tracker)` |
+| Lookup | `locator.get(Service)` | `YantraContext.get_tracker()` |
+| Scope | Global | Global (class-level) |
+| Type Safety | Generic | Typed (`IExperimentTracker`) |
+| Default | Null Object | `None` |
+
+### Thread Safety Analysis
+
+The current implementation is **NOT thread-safe**:
+
+$$
+\text{Thread A: set\_tracker}(\tau_1) \| \text{Thread B: get\_tracker}() \implies \text{race condition}
+$$
+
+In Prefect's `ConcurrentTaskRunner`, multiple tasks run as threads. The class-level `_tracker` could be read while being written, though Python's GIL prevents actual data corruption. The semantic risk is a task seeing a stale or partially-updated tracker reference.
 
 ### Variable Mapping
 
@@ -142,3 +231,176 @@ $$
 
 - **Time:** $O(1)$ for both `set_tracker` and `get_tracker`
 - **Space:** $O(1)$ — single class-level variable
+
+---
+
+## Algorithm 4: Output Truncation for Trace Storage
+
+**Source:** [prefect_utils.py:L56](file:///home/dell/PycharmProjects/Yantra/src/nikhil/yantra/domain/orchestration/prefect_utils.py#L56)
+
+### Description
+
+The decorator truncates the function's return value to 1000 characters before storing it on the MLflow span. This prevents large objects (DataFrames, model artifacts, large strings) from overwhelming the tracing storage while preserving a representative preview.
+
+### Formal Representation
+
+$$
+\text{truncate}(y, L) = \texttt{str}(y)[:L]
+$$
+
+Where:
+- $y$ is the function return value
+- $L = 1000$ is the maximum character limit
+
+### Information Loss Analysis
+
+The truncation has the following properties:
+
+$$
+|\text{truncate}(y, L)| = \min(|\text{str}(y)|, L)
+$$
+
+$$
+\text{info\_loss}(y) = \max(0, |\text{str}(y)| - L) \text{ characters}
+$$
+
+For common return types:
+
+| Return Type | Typical `str()` Size | Truncated? | Information Preserved |
+|:---|:---|:---|:---|
+| `int`, `float`, `bool` | <20 chars | ❌ | 100% |
+| Short `str` | <100 chars | ❌ | 100% |
+| Small `dict` | <500 chars | ❌ | 100% |
+| `pd.DataFrame` (10 rows) | ~2000 chars | ✅ | ~50% |
+| `pd.DataFrame` (1000 rows) | ~200,000 chars | ✅ | ~0.5% |
+| Large model output | Variable | ✅ | Variable |
+
+### Variable Mapping
+
+| LaTeX Symbol | Code Variable | Type | Location |
+|:---|:---|:---|:---|
+| $y$ | `result` | `Any` | `prefect_utils.py:L51` |
+| $L$ | `1000` | `int` (hardcoded) | `prefect_utils.py:L56` |
+
+### Complexity Analysis
+
+- **Time:** $O(L)$ — bounded string operation
+- **Space:** $O(L)$ — truncated copy
+
+---
+
+## Algorithm 5: Error-Aware Span Decoration with Re-Raise
+
+**Source:** [prefect_utils.py:L61-L66](file:///home/dell/PycharmProjects/Yantra/src/nikhil/yantra/domain/orchestration/prefect_utils.py#L61-L66)
+
+### Description
+
+When the wrapped function raises an exception, the decorator captures the error message, logs it to the span as structured attributes, then **re-raises** the exception to allow Prefect's retry mechanism to operate. This creates an error audit trail in MLflow while preserving Prefect's retry semantics.
+
+### Formal Representation
+
+$$
+\text{error\_wrap}(f, \mathbf{x}, \sigma) =
+\begin{cases}
+(y, \sigma[\text{status} \leftarrow \text{success}]) & \text{if } f(\mathbf{x}) \text{ succeeds} \\
+\sigma[\text{status} \leftarrow \text{error}, \text{msg} \leftarrow \text{str}(e)] \to \text{raise}(e) & \text{if } f(\mathbf{x}) \text{ raises } e
+\end{cases}
+$$
+
+### Retry-Error Interaction
+
+The re-raise is critical for Prefect integration:
+
+$$
+\text{Prefect.retry}(f') = \text{try}(f') \xrightarrow{\text{fail}} \text{wait}(d) \xrightarrow{\text{retry}} \text{try}(f') \quad (\text{up to } r \text{ times})
+$$
+
+If the decorator swallowed the exception (like `log_dataset` in the observability module), Prefect would see the task as "successful" and never retry. By re-raising, the decorator preserves the retry contract while adding observability:
+
+$$
+\underbrace{\text{MLflow: error logged}}_{\text{observability}} + \underbrace{\text{Prefect: exception propagated}}_{\text{orchestration}} = \text{dual-context error handling}
+$$
+
+### Variable Mapping
+
+| LaTeX Symbol | Code Variable | Type | Location |
+|:---|:---|:---|:---|
+| $e$ | `e` | `Exception` | `prefect_utils.py:L61` |
+| $\sigma$ | `span` | `MLflow Span` | `prefect_utils.py:L49` |
+
+### Complexity Analysis
+
+- **Time:** $O(|\text{str}(e)|)$ — exception serialization
+- **Space:** $O(|\text{str}(e)|)$ — error message stored on span
+
+---
+
+## Algorithm 6: Graceful Degradation via Tracker Null-Check
+
+**Source:** [prefect_utils.py:L42-L45](file:///home/dell/PycharmProjects/Yantra/src/nikhil/yantra/domain/orchestration/prefect_utils.py#L42-L45)
+
+### Description
+
+Before creating an MLflow span, the decorator checks if a tracker is configured. If no tracker exists (development/testing environments), it logs a warning and executes the function as a standard Prefect task without any MLflow overhead. This implements the **Null Object pattern** for the tracker dependency.
+
+### Formal Representation
+
+$$
+\text{degrade}(\tau, f, \mathbf{x}) =
+\begin{cases}
+f(\mathbf{x}) & \text{if } \tau = \texttt{None} \text{ (no tracker — skip MLflow)} \\
+\text{span\_wrap}(\tau, f, \mathbf{x}) & \text{if } \tau \neq \texttt{None} \text{ (full tracing)}
+\end{cases}
+$$
+
+### Overhead Analysis
+
+In degraded mode (no tracker), the only overhead is:
+
+$$
+\text{overhead}_{degraded} = T_{\text{get\_tracker}} + T_{\text{bind}} + T_{\text{null\_check}}
+$$
+
+Where $T_{\text{get\_tracker}} \approx O(1)$ (class attribute access), $T_{\text{bind}} \approx O(p)$ (argument binding), and $T_{\text{null\_check}} \approx O(1)$. Note that argument binding still occurs even when no tracker is present — this is a minor inefficiency.
+
+### Optimal Degradation (Suggested)
+
+A more efficient degradation would skip argument binding:
+
+$$
+\text{degrade}_{opt}(\tau, f, \mathbf{x}) =
+\begin{cases}
+f(\mathbf{x}) & \text{if } \tau = \texttt{None} \text{ (skip bind + MLflow)} \\
+\text{span\_wrap}(\tau, f, \mathbf{x}) & \text{otherwise}
+\end{cases}
+$$
+
+### Variable Mapping
+
+| LaTeX Symbol | Code Variable | Type | Location |
+|:---|:---|:---|:---|
+| $\tau$ | `tracker` | `Optional[IExperimentTracker]` | `prefect_utils.py:L32` |
+
+### Complexity Analysis
+
+- **Time:** $O(1)$ — null check
+- **Space:** $O(0)$ — no additional allocation
+
+---
+
+## Cross-Algorithm Dependency Graph
+
+The 6 algorithms form a linear execution pipeline within each decorated function call:
+
+$$
+A_3 \xrightarrow{\text{lookup}} A_6 \xrightarrow{\text{if tracker}} A_2 \xrightarrow{\text{bind}} A_1 \xrightarrow{\text{execute}} A_5 \xrightarrow{\text{on error}} A_4 \xrightarrow{\text{on success}}
+$$
+
+| Algorithm | Phase | Depends On | Called By |
+|:---|:---|:---|:---|
+| A1 (Dual-Context) | Execution orchestrator | A2, A3, A4, A5, A6 | Prefect engine |
+| A2 (Signature Binding) | Input capture | None (`inspect` stdlib) | A1 |
+| A3 (Singleton Context) | Tracker lookup | None | A1 (via A6) |
+| A4 (Output Truncation) | Output capture | None | A1 (on success) |
+| A5 (Error-Aware Decoration) | Error handling | None | A1 (on failure) |
+| A6 (Graceful Degradation) | Feature toggle | A3 | A1 (guard clause) |

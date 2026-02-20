@@ -210,6 +210,74 @@ flowchart TD
 
 ---
 
+## Figure 5: State Transition Diagram — Sync Lifecycle
+
+*Caption: State machine representing the `sync()` method lifecycle, showing normal-path transitions (solid), conditional branching (dashed), and error transitions (red). Each state corresponds to a distinct system condition.*
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Pulling : sync() called
+    Pulling --> TrackingInput : dvc pull success
+    Pulling --> Error : dvc pull failure
+    TrackingInput --> TrackingOutput : dvc add input_dir
+    TrackingInput --> Error : dvc add failure
+    TrackingOutput --> CheckingStatus : dvc add output_dir
+    TrackingOutput --> Error : dvc add failure
+    CheckingStatus --> Committing : .dvc files changed
+    CheckingStatus --> Pushing : no .dvc changes
+    Committing --> Pushing : git commit success
+    Committing --> Error : git commit failure
+    Pushing --> Idle : dvc push success
+    Pushing --> Error : dvc push failure
+    Error --> [*] : YantraDVCError raised
+```
+
+---
+
+## Figure 6: Data Flow Diagram — Content-Addressable Storage Pipeline
+
+*Caption: Shows how data flows from local files through DVC hashing to S3 storage. The `.dvc` metadata files (Git-tracked) serve as pointers to content-addressed objects in S3.*
+
+```mermaid
+flowchart LR
+    subgraph "Local Workspace"
+        direction TB
+        INPUT["data/input/\n(raw datasets)"]
+        OUTPUT["data/output/\n(processed results)"]
+        DVC_META[".dvc metadata\n(YAML pointers)"]
+    end
+
+    subgraph "DVC Engine"
+        direction TB
+        HASH["MD5 Hash\nComputation"]
+        CACHE[".dvc/cache/\n(local CAS)"]
+    end
+
+    subgraph "Remote Storage"
+        direction TB
+        S3["S3/MinIO Bucket\ndvc_store/"]
+        S3_OBJ["Hash-Addressed\nObjects"]
+    end
+
+    subgraph "Git Repository"
+        direction TB
+        GIT_DVC["*.dvc files\n(hash pointers)"]
+        GITIGNORE[".gitignore\n(excludes data)"]
+    end
+
+    INPUT --> HASH
+    OUTPUT --> HASH
+    HASH --> CACHE
+    HASH --> DVC_META
+    CACHE -->|dvc push| S3_OBJ
+    S3_OBJ -->|dvc pull| CACHE
+    DVC_META --> GIT_DVC
+    DVC_META --> GITIGNORE
+```
+
+---
+
 ## Table 1: Protocol Method Coverage
 
 *Caption: Complete enumeration of `IDataVersionControl` protocol methods and their implementation in `DVCDataTracker`. Source: `data_version_protocol.py:L7-L28`, `dvc_tracker.py:L10-L91`.*
@@ -239,3 +307,54 @@ flowchart TD
 | 7 | `git status --porcelain` | Check for changes | `dvc_tracker.py:L83` | `check=True` |
 | 8 | `git add` | Stage DVC metadata | `dvc_tracker.py:L86` | `check=True` |
 | 9 | `git commit` | Commit with timestamp | `dvc_tracker.py:L89` | `check=True` |
+
+---
+
+## Table 3: Configuration Schema
+
+*Caption: Complete configuration parameters consumed by `DVCSetup` and `DVCDataTracker` from YAML, showing key, type, default, and consumer.*
+
+| S.No | Config Key | Type | Default | Consumer | Source |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | `domain_root_path` | `str` | `"data/input"` | Both | `dvc_setup.py:L28`, `dvc_tracker.py:L23` |
+| 2 | `output_dir_path` | `str` | `"data/output"` | Both | `dvc_setup.py:L29`, `dvc_tracker.py:L24` |
+| 3 | `commit_message` | `str` | `"Auto-sync data"` | Tracker only | `dvc_tracker.py:L25` |
+| 4 | `s3_config.bucket_name` | `str` | Required | Setup only | `dvc_setup.py:L56` |
+| 5 | `s3_config.endpoint_url` | `str` | `None` (AWS default) | Setup only | `dvc_setup.py:L60` |
+| 6 | `s3_config.access_key_id` | `str` | Required | Setup only | `dvc_setup.py:L61` |
+| 7 | `s3_config.secret_access_key` | `str` | Required | Setup only | `dvc_setup.py:L62` |
+| 8 | `s3_config.region` | `str` | `"us-east-1"` | Setup only | `dvc_setup.py:L63` |
+| 9 | `s3_config.use_ssl` | `bool` | `False` | Setup only | `dvc_setup.py:L64` |
+
+---
+
+## Table 4: Error Handling Strategy
+
+*Caption: Comprehensive error handling matrix showing error types, source locations, handling strategy, and user-facing behavior.*
+
+| S.No | Error Condition | Source | Handler | Recovery Strategy |
+|:---:|:---|:---|:---|:---|
+| 1 | Config file not found | `dvc_setup.py:L21-L22` | `YantraDVCError` | Fail-fast with path in message |
+| 2 | S3 bucket 404 | `dvc_setup.py:L73` | Auto-create | Idempotent recovery |
+| 3 | S3 bucket 403 | `dvc_setup.py:L80-L81` | `YantraDVCError` | Credential remediation required |
+| 4 | S3 unknown error | `dvc_setup.py:L82-L83` | `YantraDVCError` | Generic error propagation |
+| 5 | Bucket creation fails | `dvc_setup.py:L78-L79` | `YantraDVCError` | Infrastructure remediation required |
+| 6 | Subprocess failure | `dvc_setup.py:L42-L45` | `CalledProcessError` → `YantraDVCError` | Error message includes stderr |
+| 7 | DVC not initialized | `dvc_tracker.py:L50-L52` | Guard clause | Skip pull, continue |
+| 8 | Target dir missing | `dvc_tracker.py:L60-L64` | Auto-create + `.gitkeep` | Defensive recovery |
+| 9 | No DVC changes | `dvc_tracker.py:L84` | Conditional skip | No commit, continue to push |
+
+---
+
+## Table 5: Architectural Design Decisions
+
+*Caption: Key architectural decisions and their rationale, tracing design intent to implementation.*
+
+| S.No | Decision | Rationale | Alternative Considered | Trade-off |
+|:---:|:---|:---|:---|:---|
+| 1 | CLI via `subprocess` (not DVC Python API) | DVC Python API is internal/unstable; CLI is the stable public contract | `dvc.api` Python package | Performance overhead from process spawn vs. API stability |
+| 2 | Protocol-based interface | Backend swappability; structural subtyping; no base class required | ABC inheritance | Protocol allows duck-typing; ABC requires explicit inheritance |
+| 3 | Setup/Tracker separation | Infrastructure provisioning (rare) vs. daily workflow (frequent) have different lifecycles | Single monolithic class | More files, but clearer responsibility boundaries |
+| 4 | Composition over inheritance | `DVCDataTracker.setup()` delegates to `DVCSetup` instance | `DVCDataTracker extends DVCSetup` | Looser coupling; Setup can evolve independently |
+| 5 | `@runtime_checkable` decorator | Enables `isinstance()` checks for dependency injection validation | Omit decorator | Minor runtime cost; significant DI benefit |
+| 6 | `.gitkeep` sentinel files | Ensures empty directories are Git-trackable and DVC-addable | Fail on empty dirs | Minor filesystem overhead; prevents cryptic DVC errors |

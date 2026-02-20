@@ -2,7 +2,7 @@
 
 ## Figure 1: Class Diagram — Orchestration Components
 
-*Caption: Class diagram showing the `YantraContext` singleton, the `yantra_task` decorator factory, and the dependency on `IExperimentTracker` from the Observability module. All class and method names verified against source code.*
+*Caption: Class diagram showing the `YantraContext` singleton, the `yantra_task` decorator factory, and the dependency on `IExperimentTracker` from the Observability module. This module is the only one in Yantra with a cross-module dependency. All class and method names verified against source code.*
 
 ```mermaid
 classDiagram
@@ -97,7 +97,7 @@ sequenceDiagram
 
 ## Figure 3: Component Diagram — Module Dependencies and External Integration
 
-*Caption: Component-level view showing how the Orchestration module bridges the Observability module (via `IExperimentTracker`) with the Prefect SDK. Verified via `import` statements across all source files.*
+*Caption: Component-level view showing how the Orchestration module bridges the Observability module (via `IExperimentTracker`) with the Prefect SDK. This is the only cross-module dependency in the Yantra system. Verified via `import` statements across all source files.*
 
 ```mermaid
 flowchart TD
@@ -118,6 +118,7 @@ flowchart TD
         PF["prefect.task"]
         PL["prefect.get_run_logger"]
         INS["inspect.signature"]
+        FN["functools.wraps"]
     end
 
     subgraph "Consumer Application"
@@ -130,10 +131,112 @@ flowchart TD
     DEC -->|wraps as| PF
     DEC -->|uses| PL
     DEC -->|introspects via| INS
+    DEC -->|preserves metadata via| FN
     DEC -->|creates spans via| PROTO
     MLF -->|implements| PROTO
     APP -->|decorates functions with| DEC
     APP -->|initializes| CTX
+```
+
+---
+
+## Figure 4: State Diagram — Decorated Task Lifecycle
+
+*Caption: State machine showing all possible states of a `@yantra_task`-decorated function during execution, including the graceful degradation path and retry cycle.*
+
+```mermaid
+stateDiagram-v2
+    [*] --> PrefectScheduled
+    PrefectScheduled --> TrackerLookup : Prefect invokes wrapper
+    TrackerLookup --> Degraded : tracker = None
+    TrackerLookup --> BindingArgs : tracker exists
+    Degraded --> DirectExecution : logger.warning()
+    DirectExecution --> [*] : return result
+    BindingArgs --> SpanCreated : inspect.signature().bind()
+    SpanCreated --> Executing : with tracker.start_span()
+    Executing --> SpanSuccess : result obtained
+    Executing --> SpanError : exception raised
+    SpanSuccess --> [*] : set_outputs + "success"
+    SpanError --> PrefectRetry : set_attribute("error") + re-raise
+    PrefectRetry --> TrackerLookup : retry attempt (up to r times)
+    PrefectRetry --> [*] : max retries exhausted
+```
+
+---
+
+## Figure 5: Decorator Composition Stack
+
+*Caption: Visual representation of the 3-layer decorator stack showing how `@yantra_task` composes Prefect task wrapping, MLflow span wrapping, and `functools.wraps` metadata preservation.*
+
+```mermaid
+flowchart TB
+    subgraph "Layer 1: Prefect Task (outermost)"
+        P_TASK["prefect.task()\nRetries, scheduling, DAG\nConcurrency management"]
+    end
+
+    subgraph "Layer 2: functools.wraps (metadata)"
+        F_WRAPS["functools.wraps(func)\nPreserve __name__, __doc__\nPreserve __module__"]
+    end
+
+    subgraph "Layer 3: MLflow Span (instrumentation)"
+        M_SPAN["tracker.start_span()\nInput capture, output truncation\nError attribute setting"]
+    end
+
+    subgraph "Layer 4: Original Function (innermost)"
+        FUNC["func(*args, **kwargs)\nBusiness logic\nRaises exceptions naturally"]
+    end
+
+    P_TASK --> F_WRAPS
+    F_WRAPS --> M_SPAN
+    M_SPAN --> FUNC
+
+    style P_TASK fill:#2d6a4f,color:#fff
+    style F_WRAPS fill:#40916c,color:#fff
+    style M_SPAN fill:#52b788,color:#000
+    style FUNC fill:#95d5b2,color:#000
+```
+
+---
+
+## Figure 6: Data Flow Diagram — Information Captured per Task Run
+
+*Caption: Shows what data flows through the decorator during each task execution, from raw function arguments to structured span attributes.*
+
+```mermaid
+flowchart LR
+    subgraph "Input Sources"
+        ARGS["Positional Args\n(*args)"]
+        KW["Keyword Args\n(**kwargs)"]
+        FNAME["Function Name\n(func.__name__)"]
+    end
+
+    subgraph "Processing"
+        BIND["inspect.signature()\n.bind().arguments"]
+        TRUNC["str(result)[:1000]"]
+        ERR["str(exception)"]
+    end
+
+    subgraph "MLflow Span Attributes"
+        S_IN["span.inputs\n(bound args dict)"]
+        S_OUT["span.outputs\n(truncated result)"]
+        S_STATUS["span.status\n('success'/'error')"]
+        S_ERR["span.error.message\n(exception text)"]
+        S_NAME["span.name\n(task name)"]
+    end
+
+    subgraph "Prefect Attributes"
+        P_LOG["Task logs\n(via get_run_logger)"]
+        P_RETRY["Retry metadata\n(attempt count)"]
+    end
+
+    ARGS --> BIND
+    KW --> BIND
+    BIND --> S_IN
+    FNAME --> S_NAME
+    TRUNC --> S_OUT
+    ERR --> S_ERR
+    S_STATUS --> P_LOG
+    S_ERR --> P_LOG
 ```
 
 ---
@@ -162,3 +265,45 @@ flowchart TD
 | 3 | `status` | `"success"` | On success | L57 |
 | 4 | `status` | `"error"` | On exception | L63 |
 | 5 | `error.message` | `str(e)` | On exception | L64 |
+
+---
+
+## Table 3: Cross-Module Dependency Analysis
+
+*Caption: The orchestration module's dependency on observability is the only inter-module dependency in Yantra, making it the system's integration point.*
+
+| S.No | Import | From Module | Used In | Purpose |
+|:---:|:---|:---|:---|:---|
+| 1 | `IExperimentTracker` | `observability` | `context.py:L4` | Type annotation for tracker |
+| 2 | `YantraContext` | `orchestration.context` | `prefect_utils.py:L6` | Tracker lookup |
+| 3 | `task`, `get_run_logger` | `prefect` (external) | `prefect_utils.py:L4` | Workflow engine |
+| 4 | `inspect` | stdlib | `prefect_utils.py:L3` | Argument binding |
+| 5 | `functools` | stdlib | `prefect_utils.py:L2` | Metadata preservation |
+
+---
+
+## Table 4: Error Handling Strategy
+
+*Caption: How errors are handled at each layer of the decorated function.*
+
+| S.No | Error Source | Detection | Span Action | Prefect Action | Source |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | Function exception | `except Exception as e` | Set "error" + message | Re-raise for retry | `prefect_utils.py:L61-L66` |
+| 2 | Missing tracker | `if not tracker` | No span created | Standard execution | `prefect_utils.py:L43-L45` |
+| 3 | Signature binding failure | `inspect.signature().bind()` | Not caught | `TypeError` propagated | `prefect_utils.py:L36` |
+
+---
+
+## Table 5: Architectural Design Decisions
+
+*Caption: Key design decisions in the orchestration module with rationale and trade-offs.*
+
+| S.No | Decision | Rationale | Alternative | Trade-off |
+|:---:|:---|:---|:---|:---|
+| 1 | Decorator factory pattern | Configurable retry/name params | Simple decorator | Flexibility vs. complexity |
+| 2 | Class-level singleton context | Global DI without instance management | `contextvars.ContextVar` | Simplicity vs. thread safety |
+| 3 | `@functools.wraps` inside `@task` | Preserve original function metadata | Omit wraps | Debuggability vs. none |
+| 4 | Output truncation at 1000 chars | Prevent large spans | Configurable limit | Predictability vs. flexibility |
+| 5 | Re-raise exception after logging | Preserve Prefect retry semantics | Swallow exception | Correctness vs. none |
+| 6 | Bind args before tracker check | Always capture inputs | Lazy bind | Consistency vs. minor overhead |
+| 7 | `YantraContext` not in `__init__.py` | Implementation detail exposure | Export it | Encapsulation vs. usability |

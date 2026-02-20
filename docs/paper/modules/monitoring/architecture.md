@@ -119,16 +119,141 @@ flowchart TD
 
 ---
 
+## Figure 4: State Diagram — Report Generation Lifecycle
+
+*Caption: State machine showing the lifecycle of a `generate_report()` invocation, including validation, computation, serialization, and error states. Each state corresponds to a distinct operation phase.*
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Validating : generate_report() called
+    Validating --> ColumnError : text_column missing
+    Validating --> PreparingDirectory : validation passed
+    PreparingDirectory --> MappingColumns : os.makedirs success
+    MappingColumns --> ComputingMetrics : ColumnMapping created
+    ComputingMetrics --> SerializingHTML : report.run() success
+    ComputingMetrics --> ExecutionError : Evidently/NLTK exception
+    SerializingHTML --> Idle : report.save_html() success
+    SerializingHTML --> ExecutionError : I/O failure
+    ColumnError --> [*] : ValueError raised
+    ExecutionError --> [*] : RuntimeError raised
+```
+
+---
+
+## Figure 5: Data Flow Diagram — NLP Processing Pipeline
+
+*Caption: Shows how data flows from raw LLM log DataFrames through NLTK tokenization, VADER sentiment analysis, and Evidently metric aggregation to produce the final HTML report.*
+
+```mermaid
+flowchart LR
+    subgraph "Input"
+        DF["pd.DataFrame\n(LLM logs)"]
+        TC["text_column\nspecification"]
+    end
+
+    subgraph "Validation Layer"
+        COL_CHECK["Column\nExistence Check"]
+        DIR_CHECK["Output Directory\nProvisioning"]
+    end
+
+    subgraph "Evidently Engine"
+        CM["ColumnMapping\n(text_features)"]
+        TE["TextEvals Preset"]
+        subgraph "NLP Metrics"
+            VADER["VADER\nSentiment"]
+            OOV["OOV Ratio\n(words corpus)"]
+            LEN["Text Length\nDistribution"]
+            WC["Word Count\nDistribution"]
+        end
+    end
+
+    subgraph "NLTK Resources"
+        WN["wordnet"]
+        OMW["omw-1.4"]
+        VL["vader_lexicon"]
+        WD["words"]
+    end
+
+    subgraph "Output"
+        HTML["HTML Report\n(self-contained)"]
+    end
+
+    DF --> COL_CHECK
+    TC --> COL_CHECK
+    COL_CHECK --> CM
+    DIR_CHECK --> HTML
+    CM --> TE
+    TE --> VADER
+    TE --> OOV
+    TE --> LEN
+    TE --> WC
+    VL -.->|provides lexicon| VADER
+    WD -.->|provides vocabulary| OOV
+    WN -.->|provides synsets| OOV
+    OMW -.->|multilingual support| OOV
+    VADER --> HTML
+    OOV --> HTML
+    LEN --> HTML
+    WC --> HTML
+```
+
+---
+
+## Figure 6: Layered Architecture — Clean Architecture Alignment
+
+*Caption: Shows how the monitoring module adheres to Clean Architecture principles with distinct interface, implementation, and external dependency layers.*
+
+```mermaid
+flowchart TB
+    subgraph "Layer 0: Interface (Stable)"
+        PROTO_L["IModelMonitor Protocol\n(model_monitor_protocol.py)"]
+    end
+
+    subgraph "Layer 1: Implementation (Concrete)"
+        IMPL_L["EvidentlyQualityMonitor\n(quality.py)"]
+    end
+
+    subgraph "Layer 2: External Libraries (Volatile)"
+        EV_L["evidently"]
+        NK_L["nltk"]
+        PD_L["pandas"]
+    end
+
+    subgraph "Layer 3: OS / Network"
+        FS_L["File System\n(os.makedirs, save_html)"]
+        NET_L["Network\n(nltk.download)"]
+    end
+
+    PROTO_L --> IMPL_L
+    IMPL_L --> EV_L
+    IMPL_L --> NK_L
+    IMPL_L --> PD_L
+    EV_L --> FS_L
+    NK_L --> NET_L
+    NK_L --> FS_L
+
+    style PROTO_L fill:#2d6a4f,color:#fff
+    style IMPL_L fill:#40916c,color:#fff
+    style EV_L fill:#52b788,color:#000
+    style NK_L fill:#52b788,color:#000
+    style PD_L fill:#52b788,color:#000
+```
+
+---
+
 ## Table 1: NLTK Resource Requirements
 
-*Caption: NLTK corpora and lexicons required by `EvidentlyQualityMonitor`, their check paths, and purpose. Source: `quality.py:L26-L31`.*
+*Caption: NLTK corpora and lexicons required by `EvidentlyQualityMonitor`, their check paths, purpose, and approximate download size. Source: `quality.py:L26-L31`.*
 
-| S.No | Check Path | Package Name | Purpose |
-|:---:|:---|:---|:---|
-| 1 | `corpora/wordnet` | `wordnet` | Word sense disambiguation, synonym detection |
-| 2 | `corpora/omw-1.4` | `omw-1.4` | Open Multilingual Wordnet for cross-language support |
-| 3 | `sentiment/vader_lexicon.zip` | `vader_lexicon` | VADER sentiment analysis lexicon |
-| 4 | `corpora/words` | `words` | English word list for OOV (Out-of-Vocabulary) detection |
+| S.No | Check Path | Package Name | Purpose | Approx. Size |
+|:---:|:---|:---|:---|:---|
+| 1 | `corpora/wordnet` | `wordnet` | Word sense disambiguation, synonym detection | ~12 MB |
+| 2 | `corpora/omw-1.4` | `omw-1.4` | Open Multilingual Wordnet for cross-language support | ~5 MB |
+| 3 | `sentiment/vader_lexicon.zip` | `vader_lexicon` | VADER sentiment analysis lexicon (7,517 entries) | ~500 KB |
+| 4 | `corpora/words` | `words` | English word list for OOV detection (236,736 words) | ~700 KB |
+
+**Total cold-start download:** ~18 MB
 
 ---
 
@@ -139,3 +264,46 @@ flowchart TD
 | S.No | Method | Parameters | Return | Purpose |
 |:---:|:---|:---|:---|:---|
 | 1 | `generate_report` | `df_logs: DataFrame`, `output_path: str`, `text_column: str = "response"` | `str` (path) | Generate quality report from LLM log data |
+
+---
+
+## Table 3: Error Handling Strategy
+
+*Caption: Comprehensive error handling matrix showing error conditions, their detection mechanism, and recovery behavior. Verified against `quality.py:L79-L111`.*
+
+| S.No | Error Condition | Detection | Exception Type | Recovery | Source |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | Missing text column | `text_column not in df_logs.columns` | `ValueError` | Fail-fast with column list | `quality.py:L80-L84` |
+| 2 | NLTK resource missing | `LookupError` from `nltk.data.find()` | Auto-download | Lazy acquisition | `quality.py:L41-L45` |
+| 3 | Evidently computation failure | Generic `Exception` catch | `RuntimeError` (chained) | Error logged with `exc_info=True` | `quality.py:L109-L111` |
+| 4 | Output directory missing | `os.makedirs(..., exist_ok=True)` | Auto-create | Idempotent provisioning | `quality.py:L87` |
+
+---
+
+## Table 4: TextEvals Metrics Inventory
+
+*Caption: Complete list of NLP metrics computed by the Evidently TextEvals preset, their mathematical basis, and interpretation guidance.*
+
+| S.No | Metric | Algorithm | Range | Good Value | Interpretation |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | Sentiment (compound) | VADER lexicon + rules | [-1, +1] | Domain-dependent | >0.05 positive, <-0.05 negative |
+| 2 | Text Length | Character count | [0, ∞) | Domain-dependent | Consistency indicator |
+| 3 | OOV Ratio | Token-vs-vocabulary | [0, 1] | <0.10 | High = garbled/hallucinated output |
+| 4 | Word Count | Whitespace tokenization | [0, ∞) | Domain-dependent | Response completeness |
+
+---
+
+## Table 5: Architectural Design Decisions
+
+*Caption: Key architectural decisions and their rationale, tracing design intent to implementation.*
+
+| S.No | Decision | Rationale | Alternative Considered | Trade-off |
+|:---:|:---|:---|:---|:---|
+| 1 | Single-method Protocol | Minimal interface; easy to implement | Multi-method interface | Simplicity vs. interface depth (see MON-GAP) |
+| 2 | `@runtime_checkable` | Enables DI validation via `isinstance()` | Omit decorator | Minor runtime cost; significant DI benefit |
+| 3 | Eager NLTK in constructor | Resources ready before any report call | Lazy in `generate_report` | Slower init, faster first report |
+| 4 | Evidently TextEvals preset | Pre-configured, production-tested metrics | Custom VADER pipeline | Less control; more reliability |
+| 5 | HTML output format | Rich visualizations, self-contained | JSON/dict | Human-readable vs. machine-readable |
+| 6 | `pandas` in Protocol signature | Ubiquitous in ML; practical choice | `Any` type | Coupling vs. type safety (see MON-GAP-003) |
+| 7 | Exception chaining (`from exc`) | Preserves original traceback | Re-raise original | Better debugging; standardized error type |
+| 8 | Structured logging (`logger`) | Production-grade; unlike `print()` in other modules | `print()` | Best practice; enables log aggregation |
