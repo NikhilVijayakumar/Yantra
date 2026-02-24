@@ -27,9 +27,9 @@ Journal Master orchestrates the generation of **publication-ready research paper
 
 Analyze modules individually:
 ```
-"Lutapi, analyze module crew_forge for the paper"
-"Lutapi, analyze module llm_factory for the paper"
-"Lutapi, analyze module output_process for the paper"
+"Lutapi, analyze module orchestration for the paper"
+"Lutapi, analyze module monitoring for the paper"
+"Lutapi, analyze module data_versioning for the paper"
 ```
 
 **Per-Module Execution:**
@@ -39,7 +39,7 @@ Analyze modules individually:
 4. **Novelty Analyst** → `novelty.md` (academic contributions) ⭐ NEW
 5. Summary Generator → `summary.md` (module overview)
 
-**Output:** 5 files in `docs/paper/modules/{module}/`
+**Output:** 5 files in `docs/paper/Yantra/modules/{module}/`
 
 ---
 
@@ -54,14 +54,36 @@ After at least 2 modules are analyzed:
 1. Interaction Analyzer → `interactions.md` (data flow, dependencies)
 2. Dependency Analyzer → `dependencies.md` (module graph)
 3. Pattern Analyzer → `patterns.md` (shared design patterns)
+4. Novelty Analyst → `novelty.md` (system-level innovations)
+5. Visual Generator → `architecture.md` (cross-module Mermaid class/flowchart diagrams)
+6. Math Extractor → `mathematics.md` (cross-module LaTeX formalisms)
+7. Research Gap Analyst → `gaps.md` (cross-module architectural debt, algorithmic limitations)
+8. Consistency Checker → `consistency_check.md` (data format, import, platform consistency audit)
 
-**Output:** 3 files in `docs/paper/cross_module/`
+**Output:** 8 files in `docs/paper/Yantra/cross_module/`
 
 ---
 
-### Phase 3: Final Synthesis
+### Phase 3: Cross-Library Analysis
 
-After cross-module analysis is complete:
+After cross-module analysis is complete or when multiple libraries exist:
+```
+"Lutapi, run cross-library analysis for the paper"
+```
+
+**Execution:**
+1. Interaction Analyzer → `interactions.md` (how libraries communicate)
+2. Dependency Analyzer → `dependencies.md` (inter-library map)
+3. Pattern Analyzer → `patterns.md` (universal architecture patterns)
+4. Novelty Analyst → `novelty.md` (macro-level innovations)
+
+**Output:** 4 files in `docs/paper/cross_library/`
+
+---
+
+### Phase 4: Final Synthesis
+
+After cross-library analysis is complete (or if skipped, cross-module):
 ```
 "Lutapi, synthesize the final journal report"
 ```
@@ -69,11 +91,31 @@ After cross-module analysis is complete:
 **Execution:**
 1. Read all module analyses
 2. Read cross-module analysis
-3. Compile into publication-ready format
-4. Generate Abstract, Introduction, Module sections, Discussion, Conclusion
-5. Create Appendix (algorithm index, pattern summary)
+3. Read cross-library analysis
+4. Compile into publication-ready format
+5. Generate Abstract, Introduction, Library/Module sections, Discussion, Conclusion
+6. Create Appendix (algorithm index, pattern summary)
 
 **Output:** `docs/paper/drafts/FINAL_JOURNAL_REPORT.md` (15-20 pages)
+
+---
+
+### Phase 5: User Input Template Generation ⭐ NEW
+
+After cross-module analysis is complete:
+```
+"Lutapi, generate user input templates for the paper"
+```
+
+**Execution:**
+1. **Execution Results Template** → `docs/paper/Yantra/user_inputs/app_execution_results.md`
+   - Pre-filled with suggested metrics and baselines
+   - User fills in actual empirical values
+2. **Practical Implications Document** → `docs/paper/Yantra/user_inputs/practical_implications.md`
+   - Auto-generated industry applicability claims
+   - User verifies each claim with checkboxes
+
+**Output:** 2 files in `docs/paper/Yantra/user_inputs/`
 
 ---
 
@@ -91,9 +133,10 @@ Check what's been completed:
   🔄 In Progress: None
   ❌ Failed: None
   📈 Cross-Module: not_started
+  📚 Cross-Library: not_started
   📄 Final Report: not_started
 
-💡 Next: "Lutapi, analyze module output_process for the paper"
+💡 Next: "Lutapi, analyze module data_versioning for the paper"
 ```
 
 ---
@@ -108,20 +151,21 @@ Output: `.agent/paper_config.yaml`
 
 ### Week 1: Core Modules
 ```
-Day 2: "Lutapi, analyze module crew_forge for the paper"
-Day 3: "Lutapi, analyze module llm_factory for the paper"
+Day 2: "Lutapi, analyze module orchestration for the paper"
+Day 3: "Lutapi, analyze module monitoring for the paper"
 ```
 
 ### Week 2: Supporting Modules
 ```
-Day 4: "Lutapi, analyze module output_process for the paper"
-Day 5: "Lutapi, analyze module crew_monitor for the paper"
+Day 4: "Lutapi, analyze module data_versioning for the paper"
+Day 5: "Lutapi, analyze module evaluation for the paper"
 ```
 
 ### Week 3: Integration
 ```
 Day 6: "Lutapi, run cross-module analysis for the paper"
-Day 7: "Lutapi, synthesize the final journal report"
+Day 7: "Lutapi, run cross-library analysis for the paper"
+Day 8: "Lutapi, synthesize the final journal report"
 ```
 
 **Result:** Complete research paper with 10+ algorithms, 12+ diagrams, gap analysis, and novelty assessment.
@@ -133,22 +177,36 @@ Day 7: "Lutapi, synthesize the final journal report"
 ```
 docs/paper/
 ├── .progress.yaml              # Progress tracker
-├── modules/
-│   ├── crew_forge/
-│   │   ├── mathematics.md      # LaTeX algorithms
-│   │   ├── architecture.md     # Mermaid diagrams
-│   │   ├── gaps.md            # Technical gaps
-│   │   ├── novelty.md         # Academic contributions ⭐
-│   │   └── summary.md         # Overview
-│   ├── llm_factory/
-│   │   └── ... (5 files)
-│   └── ... (one dir per module)
-├── cross_module/
-│   ├── interactions.md        # Data flow & dependencies
-│   ├── dependencies.md        # Module graph
-│   └── patterns.md            # Shared patterns
+├── Yantra/
+│   ├── modules/
+│   │   ├── orchestration/
+│   │   │   ├── mathematics.md      # LaTeX algorithms
+│   │   │   ├── architecture.md     # Mermaid diagrams
+│   │   │   ├── gaps.md            # Technical gaps
+│   │   │   ├── novelty.md         # Academic contributions ⭐
+│   │   │   └── summary.md         # Overview
+│   │   ├── monitoring/
+│   │   │   └── ... (5 files)
+│   │   └── ... (one dir per module)
+│   ├── cross_module/
+│   │   ├── interactions.md        # Data flow & dependencies
+│   │   ├── dependencies.md        # Module graph
+│   │   ├── patterns.md            # Shared patterns
+│   │   ├── novelty.md             # System-level innovations
+│   │   ├── architecture.md        # Cross-module diagrams
+│   │   ├── mathematics.md         # Cross-module LaTeX
+│   │   ├── gaps.md                # Cross-module research gaps
+│   │   └── consistency_check.md   # Consistency audit
+│   └── user_inputs/               # User-provided data ⭐ NEW
+│       ├── app_execution_results.md
+│       └── practical_implications.md
+├── cross_library/                 # Multi-library mode outputs
+│   ├── interactions.md            # How libraries interact
+│   ├── dependencies.md            # Macro-level dependencies
+│   ├── patterns.md                # System-wide architecture
+│   └── novelty.md                 # Global innovations
 └── drafts/
-    └── FINAL_JOURNAL_REPORT.md # Publication-ready paper
+    └── FINAL_JOURNAL_REPORT.md    # Publication-ready paper
 ```
 
 ---
@@ -204,13 +262,13 @@ generation:
   depth: comprehensive
 
 modules:
-  - name: crew_forge
-    path: src/nikhil/amsha/crew_forge
+  - name: orchestration
+    path: src/nikhil/yantra/domain/orchestration
     priority: critical
     include_in_final: true  # Set false to skip
     focus_areas:
-      - repository_pattern
-      - clean_architecture
+      - prefect_integration
+      - pipeline_patterns
 ```
 
 ---
@@ -294,6 +352,15 @@ Invoke Journal Master when:
 - [Research Gap Analyst](research-gap-analyst.md)
 - [Novelty Analyst](novelty-analyst.md) ⭐
 
+**Paper Drafting (Kutusan Pipeline):**
+- [Kutusan](kutusan.md) - 5-Stage Section Orchestrator ⭐
+- [Paper Planner](paper-planner.md) - YAML Execution Plans
+- [Paper Analyzer](paper-analyzer.md) - Cross-Library Data Synthesis
+- [Deep Analyzer](deep-analyzer.md) - Architectural Trade-off Analysis
+- [External Researcher](external-researcher.md) - Academic Citation Augmentation
+- [Paper Drafter](paper-drafter.md) - Scopus-Level Prose Writer
+- [Paper Reviewer](paper-reviewer.md) - Academic Peer Verification
+
 **Quality Assurance:**
 - [Chatha](chatha.md) - Ensure code quality before paper generation
 - [Mayavi](mayavi.md) - Fix issues identified by gap analysis
@@ -305,12 +372,14 @@ Invoke Journal Master when:
 | Command | Phase | Output |
 |:--------|:------|:-------|
 | `"Lutapi, analyze module X"` | 1.x | 5 files per module |
-| `"Lutapi, cross-module analysis"` | 2 | 3 cross-module files |
-| `"Lutapi, synthesize final report"` | 3 | Final journal paper |
+| `"Lutapi, cross-module analysis"` | 2 | 8 cross-module files |
+| `"Lutapi, run cross-library analysis"` | 3 | 4 cross-library files |
+| `"Lutapi, synthesize final report"` | 4 | Final overarching journal paper |
+| `"Lutapi, generate user input templates"` | 5 | 2 user input files |
 | `"Lutapi, show progress"` | - | Progress status |
 
 ---
 
 **Status:** ✅ Active (Phase-Wise Model)  
-**Last Updated:** 2026-02-10  
-**Version:** 2.0
+**Last Updated:** 2026-02-25  
+**Version:** 3.0

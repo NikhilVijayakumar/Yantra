@@ -12,6 +12,8 @@ This system ensures that if you follow the agents' guidance, your code is **Publ
 
 Each "skill" is an AI agent with specific expertise. Instead of generic prompts, use **trigger phrases** to activate the right agent for your task.
 
+> 📚 **Writing a Research Paper?** If you are here specifically to generate an ESWA-compliant academic paper from this codebase, please start by reading the **[Research Paper Generation Guide (User Manual)](paper_generation_guide.md)** for an in-depth walkthrough of the `Dakini` -> `Lutapi` -> `Kutusan` workflow.
+
 ---
 
 ## 🎯 Agent Categories
@@ -56,8 +58,8 @@ Each "skill" is an AI agent with specific expertise. Instead of generic prompts,
 "Mayavi, the build is failing. Please diagnose and fix."
 ```
 
-
 **Details:** [mayavi.md](skills/mayavi.md)
+
 ---
 
 #### Lutapi (Journal Master) - Research Paper Generator
@@ -69,9 +71,9 @@ Each "skill" is an AI agent with specific expertise. Instead of generic prompts,
 
 **Phase 1.x - Per-Module Analysis** (one command per module):
 ```
-"Lutapi, analyze module crew_forge for the paper"
-"Lutapi, analyze module llm_factory for the paper"
-"Lutapi, analyze module output_process for the paper"
+"Lutapi, analyze module orchestration for the paper"
+"Lutapi, analyze module monitoring for the paper"
+"Lutapi, analyze module data_versioning for the paper"
 ```
 Output per module: 5 files (mathematics, architecture, gaps, novelty, summary)
 
@@ -79,13 +81,25 @@ Output per module: 5 files (mathematics, architecture, gaps, novelty, summary)
 ```
 "Lutapi, run cross-module analysis for the paper"
 ```
-Output: 3 files (interactions, dependencies, patterns)
+Output: 8 files (interactions, dependencies, patterns, novelty, architecture, mathematics, gaps, consistency_check)
 
-**Phase 3 - Final Synthesis:**
+**Phase 3 - Cross-Library Analysis:**
+```
+"Lutapi, run cross-library analysis for the paper"
+```
+Output: 4 files (interactions, dependencies, patterns, novelty)
+
+**Phase 4 - Final Synthesis:**
 ```
 "Lutapi, synthesize the final journal report"
 ```
 Output: `docs/paper/drafts/FINAL_JOURNAL_REPORT.md` (15-20 pages)
+
+**Phase 5 - User Input Templates:** ⭐ NEW
+```
+"Lutapi, generate user input templates for the paper"
+```
+Output: Smart templates in `docs/paper/Yantra/user_inputs/` — `app_execution_results.md` (guided metrics template) and `practical_implications.md` (auto-generated, user-verified).
 
 **Progress Tracking:**
 ```
@@ -101,7 +115,7 @@ Output: `docs/paper/drafts/FINAL_JOURNAL_REPORT.md` (15-20 pages)
 ### 2. Paper Publishing Agents (5 Specialists)
 
 #### Dakini - Paper Config Generator
-**Trigger:** `"Dakini, generate paper config"` or `"Dakini"`
+**Trigger:** `"Dakini, generate paper config"` or `"Dakini, generate library paper config"` or `"Dakini"`
 
 **Purpose:** Auto-detects modules in your codebase and generates `.agent/paper_config.yaml`.
 
@@ -112,8 +126,8 @@ generation:
   depth: comprehensive
 
 modules:
-  - name: crew_forge
-    path: src/nikhil/amsha/crew_forge
+  - name: orchestration
+    path: src/nikhil/yantra/domain/orchestration
     priority: critical
     include_in_final: true
 ```
@@ -127,7 +141,7 @@ modules:
 
 **Purpose:** Scans code for algorithms and converts them to formal LaTeX equations.
 
-**Output:** `docs/paper/modules/{module}/mathematics.md`
+**Output:** `docs/paper/Yantra/modules/{module}/mathematics.md`
 
 **Example Output:**
 ```latex
@@ -137,7 +151,7 @@ $$
 Complexity: $O(\log n)$ with indexing
 ```
 
-**Details:** [journal-math-extractor.md](skills/journal-math-extractor.md)
+**Details:** [math-extractor.md](skills/math-extractor.md)
 
 ---
 
@@ -146,7 +160,7 @@ Complexity: $O(\log n)$ with indexing
 
 **Purpose:** Creates Mermaid.js diagrams and performance tables.
 
-**Output:** `docs/paper/modules/{module}/architecture.md`
+**Output:** `docs/paper/Yantra/modules/{module}/architecture.md`
 
 **Diagram Types:**
 - Class diagrams
@@ -164,7 +178,7 @@ Complexity: $O(\log n)$ with indexing
 
 **Purpose:** Identifies **technical gaps** that block Scopus publication (tests, benchmarks, documentation).
 
-**Output:** `docs/paper/modules/{module}/gaps.md`
+**Output:** `docs/paper/Yantra/modules/{module}/gaps.md`
 
 **Gap Categories:**
 - Critical: No unit tests, no benchmarks
@@ -180,7 +194,7 @@ Complexity: $O(\log n)$ with indexing
 
 **Purpose:** Identifies **academic novelty** and suggests research angles when novelty is weak.
 
-**Output:** `docs/paper/modules/{module}/novelty.md`
+**Output:** `docs/paper/Yantra/modules/{module}/novelty.md`
 
 **Novelty Classification:**
 - **NOVEL:** New algorithms, original patterns
@@ -202,7 +216,27 @@ Complexity: $O(\log n)$ with indexing
 3. **Case Study:** "Lessons from Applying Clean Architecture to Python LLM Orchestration"
 ```
 
-**Details:** [novelty-analyst.md](skills/novelty-analyst.md)
+**Details:** `.agent/skills/novelty-analyst/SKILL.md`
+
+---
+
+#### Kutusan - Journal Paper Orchestrator ⭐ NEW
+**(Trigger:** `"Kutusan, initialize the final journal report outline"` or `"Kutusan, generate the [Section Name] for the paper"`)
+
+**Purpose:** Manages a 5-stage sequential pipeline (Plan -> Analyze -> Augment -> Draft -> Review) to synthetically draft the `FINAL_JOURNAL_REPORT.md` section by section. It ensures deep intelligence is derived from `Amsha`, `Yantra`, `Bodha`, and `cross_module` integrations.
+
+**Output:** `docs/paper/Yantra/drafts/FINAL_JOURNAL_REPORT.md`
+
+| Agent | Role & Intent | Core Capabilities | Output Target |
+| :--- | :--- | :--- | :--- |
+| **`kutusan`** | **Paper Orchestrator:** Drives the 5-stage paper generation pipeline (Plan -> Analyze -> Augment -> Draft -> Review). | 11-stage section sequencing, state management, final synthesis. | `docs/paper/Yantra/drafts/FINAL_JOURNAL_REPORT.md` |
+| **`paper-planner`** | **Planner:** Translates section goals into executable YAML instructions. | Identifies data sources, defines drafting style, sets ESWA mandatory elements. | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/plan_*.yaml` |
+| **`paper-analyzer`** | **Fact Extractor:** Synthesizes architecture, interactions, and gaps across all 4 doc layers. | Traceability, code-to-text translation, gap summarization. | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/analysis_*.md` |
+| **`external-researcher`** | **Q1 Academic Scholar:** Augments references and related work. | Finds 2022-2026 Q1 Scopus citations, ESWA-specific relevance, builds comparison tables. | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/augmented_analysis_*.md` |
+| **`deep-analyzer`** | **Principal Engineer:** Synthesizes profound architectural trade-offs. | Explains the "Why", enforces mathematical complexity analysis (Big-O, runtime limits). | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/augmented_analysis_*.md` |
+| **`paper-drafter`** | **Academic Writer:** Converts analysis into publication-ready prose. | IEEE LaTeX math, Mermaid.js Visual Hierarchy (Logical vs Physical diagrams), Scopus tone. | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/draft_*.md` |
+| **`paper-reviewer`** | **Peer Reviewer:** Verifies drafts against the plan and data points. | Anti-hallucination checks, ESWA vocabulary tone enforcement (bans "simple", "easy"). | `docs/paper/Yantra/drafts/details/[N]. [Section Name]/verified_*.md` |
+| **`eswa-compliance-checker`** | **Desk Editor:** Verifies global structural benchmarks post-review. | Checks 6,500+ word count, 35-45 refs, 60-70% recency, ESWA citations, statistical tests. | `docs/paper/Yantra/drafts/details/eswa_compliance_report.md` |
 
 ---
 
@@ -349,19 +383,27 @@ tests/
 | 1 | Chatha | Orchestrator | `"Chatha"` | TDD lifecycle enforcement |
 | 2 | Mayavi | Orchestrator | `"Mayavi"` | Diagnosis & fix delegation |
 | 3 | Lutapi | Orchestrator | `"Lutapi, analyze module X"` | Research paper (phase-wise) |
-| 4 | Dakini | Paper Publishing | `"Dakini"` | `paper_config.yaml` |
-| 5 | Math Extractor | Paper Publishing | (Auto) | LaTeX algorithms |
-| 6 | Visual Generator | Paper Publishing | (Auto) | Mermaid diagrams |
-| 7 | Research Gap Analyst | Paper Publishing | (Auto) | Technical gaps |
-| 8 | Novelty Analyst | Paper Publishing | (Auto) | Academic contribution analysis |
-| 9 | Doc Architect | Development | `"Document X"` | Trinity docs |
-| 10 | Clean Implementation | Development | `"Implement X"` | Pydantic + Clean Arch code |
-| 11 | Test Scaffolder | Development | `"Create tests"` | Unit/E2E/Integration tests |
-| 12 | Refactor Agent | Development | `"Refactor X"` | Complexity reduction |
-| 13 | Compliance Officer | Quality | `"Audit X"` | Rule violation report |
-| 14 | Security Scanner | Quality | `"Scan X"` | Vulnerability report |
-| 15 | Package Maintainer | Infrastructure | `"Prepare package"` | PyPI readiness |
-| 16 | Logging Architect | Infrastructure | `"Add logging"` | Structured logging |
+| 4 | Kutusan | Orchestrator | `"Kutusan, generate X"` | 5-Stage Section Pipeline |
+| 5 | Dakini | Paper Publishing | `"Dakini"` | `paper_config.yaml` |
+| 6 | Math Extractor | Paper Publishing | (Auto) | LaTeX algorithms |
+| 7 | Visual Generator | Paper Publishing | (Auto) | Mermaid diagrams |
+| 8 | Research Gap Analyst | Paper Publishing | (Auto) | Technical gaps |
+| 9 | Novelty Analyst | Paper Publishing | (Auto) | Academic contribution analysis |
+| 10 | Paper Planner | Paper Publishing | (Auto, Kutusan) | Planner config (YAML) |
+| 11 | Paper Analyzer | Paper Publishing | (Auto, Kutusan) | Data Synthesis |
+| 12 | External Researcher | Paper Publishing | (Auto, Kutusan) | Analysis Augmentation |
+| 13 | Deep Analyzer | Paper Publishing | (Auto, Kutusan) | Architectural Synthesis |
+| 14 | Paper Drafter | Paper Publishing | (Auto, Kutusan) | Academic Section Draft |
+| 15 | Paper Reviewer | Paper Publishing | (Auto, Kutusan) | Section Verification |
+| 16 | ESWA Compliance Checker | Paper Publishing | (Auto, Kutusan) | Compliance Report |
+| 17 | Doc Architect | Development | `"Document X"` | Trinity docs |
+| 18 | Clean Implementation | Development | `"Implement X"` | Pydantic + Clean Arch code |
+| 19 | Test Scaffolder | Development | `"Create tests"` | Unit/E2E/Integration tests |
+| 20 | Refactor Agent | Development | `"Refactor X"` | Complexity reduction |
+| 21 | Compliance Officer | Quality | `"Audit X"` | Rule violation report |
+| 22 | Security Scanner | Quality | `"Scan X"` | Vulnerability report |
+| 23 | Package Maintainer | Infrastructure | `"Prepare package"` | PyPI readiness |
+| 24 | Logging Architect | Infrastructure | `"Add logging"` | Structured logging |
 
 ---
 
@@ -403,16 +445,17 @@ Step 3: Mayavi re-verifies
 ```bash
 Week 1 - Core Modules:
   Day 1: "Dakini, generate paper config"
-  Day 2: "Lutapi, analyze module crew_forge for the paper"
-  Day 3: "Lutapi, analyze module llm_factory for the paper"
+  Day 2: "Lutapi, analyze module orchestration for the paper"
+  Day 3: "Lutapi, analyze module monitoring for the paper"
 
 Week 2 - Supporting Modules:
-  Day 4: "Lutapi, analyze module output_process for the paper"
-  Day 5: "Lutapi, analyze module crew_monitor for the paper"
+  Day 4: "Lutapi, analyze module data_versioning for the paper"
+  Day 5: "Lutapi, analyze module evaluation for the paper"
 
 Week 3 - Synthesis:
   Day 6: "Lutapi, run cross-module analysis for the paper"
-  Day 7: "Lutapi, synthesize the final journal report"
+  Day 7: "Lutapi, run cross-library analysis for the paper"
+  Day 8: "Lutapi, synthesize the final journal report"
 
 Result: 15-20 page publication-ready paper with:
   - 10+ LaTeX algorithms
@@ -420,6 +463,28 @@ Result: 15-20 page publication-ready paper with:
   - Technical gap analysis
   - Academic novelty assessment
   - Suggestions for strengthening contributions
+```
+
+---
+
+### Workflow 4: Draft Final Journal Report (Kutusan 5-Stage Pipeline)
+```bash
+Phase 1: Setup
+  "Kutusan, initialize the final journal report outline"
+  → Creates `docs/paper/Yantra/drafts/FINAL_JOURNAL_REPORT.md`
+
+Phase 2: Generate Section (e.g., "Related Work")
+  - `paper-planner.md`: Generates a detailed YAML plan for the section, defining data sources, academic goals, and ESWA mandatory elements.
+  - `paper-analyzer.md`: Scans designated data sources to synthesize raw facts, equations, and diagrams.
+  - `external-researcher.md`: Augments references with Q1 Scopus citations (2022-2026), ESWA relevance, and comparison tables.
+  - `deep-analyzer.md`: Augments methodology with profound architectural synthesis and formal mathematical complexity analysis.
+  - `paper-drafter.md`: Converts facts to academic prose with LaTeX/Mermaid (enforcing Visual Hierarchy).
+  - `paper-reviewer.md`: Verifies drafts against data to block hallucination and enforces ESWA vocabulary tone.
+  - `eswa-compliance-checker.md`: Validates global structural benchmarks (word count, citation recency, figure density) before final assembly.
+
+Phase 3: Final Synthesis
+  "Kutusan, finalize the journal paper"
+  → Assembles all verified sections into the final PDF/Markdown
 ```
 
 ---
@@ -461,17 +526,30 @@ project/
 │   │       └── test/README.md
 │   └── paper/ (from Lutapi)
 │       ├── .progress.yaml (progress tracker)
-│       ├── modules/
-│       │   └── {module}/
-│       │       ├── mathematics.md
-│       │       ├── architecture.md
-│       │       ├── gaps.md
-│       │       ├── novelty.md ⭐
-│       │       └── summary.md
-│       ├── cross_module/
+│       ├── Yantra/
+│       │   ├── modules/
+│       │   │   └── {module}/
+│       │   │       ├── mathematics.md
+│       │   │       ├── architecture.md
+│       │   │       ├── gaps.md
+│       │   │       ├── novelty.md ⭐
+│       │   │       └── summary.md
+│       │   ├── cross_module/
+│       │   │   ├── interactions.md
+│       │   │   ├── dependencies.md
+│       │   │   ├── patterns.md
+│       │   │   ├── novelty.md
+│       │   │   ├── architecture.md
+│       │   │   ├── mathematics.md
+│       │   │   ├── gaps.md
+│       │   │   └── consistency_check.md
+│       ├── Amsha/
+│       ├── Bodha/
+│       ├── cross_library/
 │       │   ├── interactions.md
 │       │   ├── dependencies.md
-│       │   └── patterns.md
+│       │   ├── patterns.md
+│       │   └── novelty.md
 │       └── drafts/
 │           └── FINAL_JOURNAL_REPORT.md
 ├── src/ (from Clean Implementation)
@@ -502,10 +580,17 @@ project/
 - 5 specialized skills (Dakini, Math Extractor, Visual Generator, Research Gap, Novelty)
 - Generates Scopus-ready papers with LaTeX + Mermaid diagrams
 
+### 5. ESWA-Compliant Kutusan Pipeline ⭐ NEW
+- 5-stage pipeline (Plan → Analyze → Augment → Draft → Review)
+- 7 specialized sub-agents for journal-quality section drafting
+- ESWA compliance checker for global structural validation
+- Anti-hallucination guarantees via fact-checking reviewer
+
 ---
 
 ## 🔗 Further Resources
 
+- **Paper Generation Guide:** `docs/agent/paper_generation_guide.md`
 - **Quick commands:** `.agent/skills/journal-master/resources/phase_wise_commands.md`
 - **Individual skill docs:** `.agent/skills/{skill-name}/SKILL.md`
 - **Rule definitions:** `.agent/rules/*.md`
@@ -513,7 +598,7 @@ project/
 
 ---
 
-**System Version:** 2.0  
-**Last Updated:** 2026-02-10  
+**System Version:** 3.0  
+**Last Updated:** 2026-02-25  
 **Based On:** Nibandha (significantly enhanced)  
 **Primary Authors:** Amsha Research Team
