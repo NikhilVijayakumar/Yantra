@@ -1,6 +1,6 @@
 [project]
 name = "Yantra"
-version = "1.0.10"
+version = "1.0.11"
 description = "Yantra is a unified MLOps library that provides clean, protocol-based interfaces for essential MLOps tools including DVC, MLflow, Prefect, and Evidently."
 dependencies = [
        "Nibandha[export] @ git+https://github.com/NikhilVijayakumar/Nibandha.git@main",
